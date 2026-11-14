@@ -4,11 +4,13 @@ from datetime import datetime
 
 
 class CategoryResponse(BaseModel):
+    model_config=ConfigDict(from_attributes=True)
     id: int
     name: str
 
 
 class UserSummary(BaseModel):
+    model_config=ConfigDict(from_attributes=True)
     id: int
     name: str
 
@@ -40,7 +42,7 @@ class TicketCreate(BaseModel):
 
 class TicketUpdate(BaseModel):
     model_config=ConfigDict(extra="forbid")
-    status:Literal["open","in_progress","resolved","closed"] |None = None
+    status:Literal["open","under_review","in_progress","resolved","closed"] |None = None
     priority: Literal["low", "medium", "high", "urgent"] |None = None
     
     
@@ -50,16 +52,19 @@ class TicketReplace(BaseModel):
     description: str = Field(min_length=10, max_length=150)
     category: str
     priority: Literal["low", "medium", "high", "urgent"]
-    status:Literal["open","in_progress","resolved","closed"]
-    assigned_to:UserSummary|None
 
 class TicketResponse(BaseModel):
+    model_config=ConfigDict(from_attributes=True)
     id: int
     title: str
     description: str
     category: CategoryResponse
+    requested_priority: Literal["low", "medium", "high", "urgent"]
     priority: Literal["low", "medium", "high", "urgent"]
     status: str
-    assigned_to: UserSummary | None = None
+    assigned_to: UserSummary | None = Field(
+        default=None,
+        validation_alias="assigned_agent"
+    )
     created_at: datetime
     updated_at: datetime
