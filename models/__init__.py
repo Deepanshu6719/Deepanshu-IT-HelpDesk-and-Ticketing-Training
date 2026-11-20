@@ -3,3 +3,7 @@ from models.department import Department
 from models.category import Category
 from models.ticket import Ticket
 from models.ticket_comment import TicketComment
+from models.role import Role
+from models.user_role import UserRole
+from models.user_session import UserSession
+from models.refresh_token import RefreshToken
