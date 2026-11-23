@@ -5,13 +5,12 @@ import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
-
+from uuid import UUID
 from database.dependencies import get_db
 from core.security import decode_access_token
 from models.user import User
 from models.user_session import UserSession
 from core.permissions  import has_role
-
 oauth2_scheme = OAuth2PasswordBearer(
     tokenUrl="/auth/login",
     auto_error=True,
@@ -77,7 +76,16 @@ def get_current_user(
     # Step 5: Extract session ID from JWT
     session_id = payload.get("sid")
 
-    if type(session_id) is not int or session_id <= 0:
+    if not isinstance(session_id, str):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    try:
+        session_id = str(UUID(session_id))
+    except ValueError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication credentials",
