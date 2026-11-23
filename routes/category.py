@@ -9,16 +9,25 @@ from models.department import Department
 from models.user import User
 from schema.ticket_schema import CategoryResponse, CategoryCreate, CategoryPatch
 from core.dependencies import get_current_user, require_admin
+from core.pagination import Pagination
 
 router = APIRouter(tags=["Category"])
 
 
 @router.get("/categories", response_model=list[CategoryResponse])
 def get_categories(
+    pagination: Pagination = Depends(Pagination),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
-    statement = select(Category).where(Category.is_active.is_(True))
+    statement = (
+        select(Category)
+        .where(Category.is_active.is_(True))
+        .order_by(Category.id)
+        .offset(pagination.skip)
+        .limit(pagination.limit)
+    )
+
     categories = db.scalars(statement).all()
     return categories
 

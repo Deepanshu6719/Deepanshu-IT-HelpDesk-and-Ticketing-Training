@@ -6,7 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from database.dependencies import get_db
 from core.dependencies import require_admin, get_current_user
 from core.security import get_password_hash, verify_password
-
+from core.pagination import Pagination
 from models.user import User
 from models.department import Department
 from models.role import Role
@@ -99,10 +99,13 @@ def create_user(
 
 @router.get("/users", response_model=list[UserResponse])
 def get_all_users(
+    pagination: Pagination = Depends(Pagination),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
-    statement = select(User).order_by(User.id)
+    statement = (
+        select(User).order_by(User.id).offset(pagination.skip).limit(pagination.limit)
+    )
 
     users = db.scalars(statement).all()
 
