@@ -1,3 +1,7 @@
+from celery_app import celery_app
+
+
+@celery_app.task
 def send_notification(
     recipient_email: str,
     subject: str,

@@ -18,6 +18,7 @@ TWO RULES TO REMEMBER WHEN WRITING TESTS
   call `db_session.commit()` so the change is visible to the endpoint you call next.
 * Never hard-code row ids (sequences are not rolled back). Use `thing.id`.
 """
+
 import itertools
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -80,11 +81,11 @@ def engine():
     except OperationalError:
         pytest.exit(
             f"Cannot connect to test database '{TEST_DB_NAME}'. Create it first, e.g.:\n"
-            f"  sudo -u postgres psql -c \"CREATE DATABASE {TEST_DB_NAME} OWNER {settings.DB_USER};\"",
+            f'  sudo -u postgres psql -c "CREATE DATABASE {TEST_DB_NAME} OWNER {settings.DB_USER};"',
             returncode=2,
         )
 
-    Base.metadata.drop_all(test_engine)    # start from a clean slate
+    Base.metadata.drop_all(test_engine)  # start from a clean slate
     Base.metadata.create_all(test_engine)
     yield test_engine
     Base.metadata.drop_all(test_engine)
@@ -123,13 +124,19 @@ def client(db_session):
 
 
 class NotificationRecorder:
-    """Stands in for core.notifications.send_notification (no printing, easy to assert on)."""
+    """Records Celery notification task calls during tests."""
 
     def __init__(self):
         self.calls = []
 
-    def __call__(self, recipient_email, subject, message):
-        self.calls.append({"to": recipient_email, "subject": subject, "message": message})
+    def delay(self, recipient_email, subject, message):
+        self.calls.append(
+            {
+                "to": recipient_email,
+                "subject": subject,
+                "message": message,
+            }
+        )
 
     @property
     def recipients(self):
@@ -138,11 +145,15 @@ class NotificationRecorder:
 
 @pytest.fixture(autouse=True)
 def notifications(monkeypatch):
-    """Replaces send_notification in routes/tickets.py for EVERY test."""
+    """Replaces the Celery notification task in routes/tickets.py for every test."""
     recorder = NotificationRecorder()
     monkeypatch.setattr("routes.tickets.send_notification", recorder)
     return recorder
 
+@pytest.fixture(autouse=True)
+def disable_rate_limit_for_tests(monkeypatch):
+    """Disable login rate limiting during ordinary tests."""
+    monkeypatch.setattr("routes.auth.check_rate_limit", lambda **kwargs: None)
 
 # --------------------------------------------------------------------------- #
 # Data factories (call them inside tests to build exactly the data you need)

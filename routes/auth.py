@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
-
-from fastapi import APIRouter, Depends, HTTPException, status
+from core.rate_limit import check_rate_limit
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select, update
 from sqlalchemy.exc import SQLAlchemyError
@@ -26,9 +26,15 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 @router.post("/login")
 def login(
+    request: Request,
     user_credentials: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
 ):
+    check_rate_limit(
+        key=f"helpdesk:rate_limit:login:{request.client.host}",
+        limit=5,
+        window=60,
+    )
     # 1. Find the user
     statement = select(User).where(User.email == user_credentials.username)
     user = db.scalar(statement)
@@ -106,7 +112,6 @@ def login(
         "refresh_token": refresh_token,
         "token_type": "bearer",
     }
-
 
 
 @router.post("/refresh")
@@ -256,7 +261,6 @@ def refresh_access_token(
     except SQLAlchemyError:
         db.rollback()
         raise
-
 
 
 @router.post("/logout")
