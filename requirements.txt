@@ -8,3 +8,6 @@ pwdlib[argon2]
 PyJWT
 pydantic-settings
 python-multipart
+pytest
+httpx
+email-validator
