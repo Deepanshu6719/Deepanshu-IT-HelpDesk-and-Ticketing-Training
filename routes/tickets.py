@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from typing import Literal
 from sqlalchemy import select, or_, func
 from sqlalchemy.orm import Session, selectinload
-from fastapi import APIRouter, HTTPException, Depends, status, Query
+from fastapi import APIRouter, HTTPException, Depends, status, Query, BackgroundTasks
 from schema.ticket_schema import (
     TicketCreate,
     TicketResponse,
@@ -15,6 +15,10 @@ from models.category import Category
 from models.ticket import Ticket
 from core.dependencies import get_current_user
 from core.permissions import has_role
+from models.role import Role
+from models.user_role import UserRole
+from core.notifications import send_notification
+
 router = APIRouter(tags=["Tickets"])
 
 
@@ -123,6 +127,7 @@ def get_tickets(
 )
 def create_ticket(
     ticket: TicketCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -147,7 +152,17 @@ def create_ticket(
         priority=ticket.priority,
         status="open",
     )
+    admin_statement = (
+        select(User.email)
+        .join(User.role_assignments)
+        .join(UserRole.role)
+        .where(
+            Role.name == "admin",
+            User.is_active.is_(True),
+        )
+    )
 
+    admin_emails = db.scalars(admin_statement).unique().all()
     try:
         db.add(new_ticket)
         db.commit()
@@ -156,7 +171,23 @@ def create_ticket(
     except Exception:
         db.rollback()
         raise
+    # Notify all active admins
+    for admin_email in admin_emails:
+        background_tasks.add_task(
+            send_notification,
+            admin_email,
+            "New ticket created",
+            f"A new ticket #{new_ticket.id} has been created "
+            f"by {current_user.email}.",
+        )
 
+    # Notify the requester
+    background_tasks.add_task(
+        send_notification,
+        current_user.email,
+        "Ticket created successfully",
+        f"Your ticket #{new_ticket.id} has been created successfully.",
+    )
     return new_ticket
 
 
@@ -207,11 +238,11 @@ def get_ticket(
     )
 
 
-
 @router.patch("/tickets/{ticket_id}", response_model=TicketResponse)
 def update_ticket(
     ticket_id: int,
     ticket_update: TicketPatch,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -235,6 +266,7 @@ def update_ticket(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Ticket not found",
         )
+    previous_assigned_to = ticket.assigned_to
 
     is_admin = has_role(current_user, "admin")
     is_agent = has_role(current_user, "agent")
@@ -357,7 +389,6 @@ def update_ticket(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Agent does not belong to the ticket department",
             )
-
     # Apply updates
     for key, value in update_data.items():
         setattr(ticket, key, value)
@@ -369,7 +400,29 @@ def update_ticket(
     except Exception:
         db.rollback()
         raise
+    
+    # Notify only when a ticket is newly assigned or reassigned
+    if (
+        ticket.assigned_to is not None
+        and ticket.assigned_to != previous_assigned_to
+    ):
+        assigned_agent = ticket.assigned_agent
+        requester = ticket.requester
+        # Notify the assigned agent
+        background_tasks.add_task(
+            send_notification,
+            assigned_agent.email,
+            "New ticket assigned",
+            f"Ticket #{ticket.id} - {ticket.title} has been assigned to you.",
+        )
 
+        # Notify the requester
+        background_tasks.add_task(
+            send_notification,
+            requester.email,
+            "Ticket assigned",
+            f"Your ticket #{ticket.id} has been assigned to an agent.",
+        )
     return ticket
 
 
