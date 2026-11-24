@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-
+from core.cache import invalidate_cache
 from database.dependencies import get_db
 from models.category import Category
 from models.department import Department
@@ -10,7 +10,13 @@ from models.user import User
 from schema.ticket_schema import CategoryResponse, CategoryCreate, CategoryPatch
 from core.dependencies import get_current_user, require_admin
 from core.pagination import Pagination
-
+import json
+from core.cache import (
+    redis_client,
+    get_cache,
+    set_cache,
+    invalidate_cache,
+)
 router = APIRouter(tags=["Category"])
 
 
@@ -20,6 +26,11 @@ def get_categories(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
+    cache_key = f"helpdesk:categories:{pagination.skip}:{pagination.limit}"
+    cached_categories = get_cache(cache_key)
+
+    if cached_categories is not None:
+        return cached_categories
     statement = (
         select(Category)
         .where(Category.is_active.is_(True))
@@ -29,7 +40,13 @@ def get_categories(
     )
 
     categories = db.scalars(statement).all()
-    return categories
+    category_data = [
+        CategoryResponse.model_validate(category).model_dump()
+        for category in categories
+    ]
+
+    set_cache(cache_key, category_data)
+    return category_data #or categories
 
 
 @router.post(
@@ -66,7 +83,7 @@ def create_category(
             status_code=status.HTTP_409_CONFLICT,
             detail="Category already exists in this department",
         )
-
+    invalidate_cache("helpdesk:categories:*")
     return new_category
 
 
@@ -100,7 +117,7 @@ def update_category(
             status_code=status.HTTP_409_CONFLICT,
             detail="Category with this name already exists in this department",
         )
-
+    invalidate_cache("helpdesk:categories:*")
     return category
 
 
@@ -132,5 +149,5 @@ def deactivate_category(
 
     db.commit()
     db.refresh(category)
-
+    invalidate_cache("helpdesk:categories:*")
     return category
