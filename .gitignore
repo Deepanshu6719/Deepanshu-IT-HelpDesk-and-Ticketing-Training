@@ -8,3 +8,7 @@ __pycache__/
 
 test_persistence.py
 Helpdesk Local.session.sql
+
+
+*.py[cod]
+.pytest_cache/

@@ -135,10 +135,10 @@ def create_ticket(
 
     category = db.scalar(statement)
 
-    if category is None:
+    if category is None or not category.is_active:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Category not found",
+            detail="Invalid or inactive category",
         )
 
     new_ticket = Ticket(
