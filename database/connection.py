@@ -1,6 +1,7 @@
-from core.config import settings
 from sqlalchemy import URL, create_engine
 from sqlalchemy.orm import sessionmaker
+
+from core.config import settings
 
 DATABASE_URL = URL.create(
     drivername="postgresql+psycopg",
@@ -9,12 +10,10 @@ DATABASE_URL = URL.create(
     host=settings.DB_HOST,
     port=settings.DB_PORT,
     database=settings.DB_NAME,
-)# the db url and also the db driver is present here
+)  # the db url and also the db driver is present here
 
-engine = create_engine(DATABASE_URL)#creating the engine and its object in "engine"
+engine = create_engine(DATABASE_URL)  # creating the engine and its object in "engine"
 
 SessionLocal = sessionmaker(
-    bind=engine,
-    autoflush=False,
-    autocommit=False
-)#its a session factory
+    bind=engine, autoflush=False, autocommit=False
+)  # its a session factory

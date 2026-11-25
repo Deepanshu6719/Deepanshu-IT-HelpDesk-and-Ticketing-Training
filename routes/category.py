@@ -2,21 +2,20 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from core.cache import invalidate_cache
+
+from core.cache import (
+    get_cache,
+    invalidate_cache,
+    set_cache,
+)
+from core.dependencies import require_admin
+from core.pagination import Pagination
 from database.dependencies import get_db
 from models.category import Category
 from models.department import Department
 from models.user import User
-from schema.ticket_schema import CategoryResponse, CategoryCreate, CategoryPatch
-from core.dependencies import get_current_user, require_admin
-from core.pagination import Pagination
-import json
-from core.cache import (
-    redis_client,
-    get_cache,
-    set_cache,
-    invalidate_cache,
-)
+from schema.ticket_schema import CategoryCreate, CategoryPatch, CategoryResponse
+
 router = APIRouter(tags=["Category"])
 
 
@@ -46,7 +45,7 @@ def get_categories(
     ]
 
     set_cache(cache_key, category_data)
-    return category_data #or categories
+    return category_data  # or categories
 
 
 @router.post(
@@ -77,12 +76,12 @@ def create_category(
     try:
         db.commit()
         db.refresh(new_category)
-    except IntegrityError:
+    except IntegrityError as exc:
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Category already exists in this department",
-        )
+        ) from exc
     invalidate_cache("helpdesk:categories:*")
     return new_category
 
@@ -111,12 +110,12 @@ def update_category(
         db.commit()
         db.refresh(category)
 
-    except IntegrityError:
+    except IntegrityError as exc:
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Category with this name already exists in this department",
-        )
+        ) from exc
     invalidate_cache("helpdesk:categories:*")
     return category
 

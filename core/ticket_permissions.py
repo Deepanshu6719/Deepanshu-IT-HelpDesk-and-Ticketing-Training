@@ -1,5 +1,5 @@
-
 from fastapi import HTTPException, status
+
 from core.permissions import has_role
 from models.ticket import Ticket
 from models.user import User
@@ -7,8 +7,8 @@ from models.user import User
 
 def check_ticket_access(ticket: Ticket, current_user: User):
 
-    is_admin = has_role(current_user,"admin")
-    is_agent = has_role(current_user,"agent")
+    is_admin = has_role(current_user, "admin")
+    is_agent = has_role(current_user, "agent")
 
     if is_admin:
         return

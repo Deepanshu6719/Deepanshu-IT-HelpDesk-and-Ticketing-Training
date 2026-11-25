@@ -1,4 +1,3 @@
-
 from datetime import datetime
 from typing import TYPE_CHECKING
 
@@ -14,9 +13,7 @@ if TYPE_CHECKING:
 class RefreshToken(Base):
     __tablename__ = "refresh_tokens"
 
-    id: Mapped[int] = mapped_column(
-        primary_key=True
-    )
+    id: Mapped[int] = mapped_column(primary_key=True)
 
     session_id: Mapped[str] = mapped_column(
         ForeignKey("user_sessions.id"),
@@ -51,9 +48,7 @@ class RefreshToken(Base):
         nullable=True,
     )
 
-    session: Mapped["UserSession"] = relationship(
-        back_populates="refresh_tokens"
-    )
+    session: Mapped["UserSession"] = relationship(back_populates="refresh_tokens")
 
     replaced_by: Mapped["RefreshToken | None"] = relationship(
         remote_side="RefreshToken.id",

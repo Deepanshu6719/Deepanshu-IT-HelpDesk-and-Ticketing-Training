@@ -1,12 +1,13 @@
 import uuid
+from unittest.mock import patch
 
 import pytest
 from fastapi import HTTPException
+from redis.exceptions import RedisError
 
 from core.rate_limit import check_rate_limit
 from database.redis import redis_client
-from unittest.mock import patch
-from redis.exceptions import RedisError
+
 
 def test_rate_limit_blocks_requests_after_limit():
     key = f"test:rate_limit:{uuid.uuid4()}"
@@ -33,6 +34,7 @@ def test_rate_limit_blocks_requests_after_limit():
     finally:
         redis_client.delete(key)
 
+
 def test_rate_limit_counter_has_expiration():
     key = f"test:rate_limit:{uuid.uuid4()}"
 
@@ -50,16 +52,19 @@ def test_rate_limit_counter_has_expiration():
     finally:
         redis_client.delete(key)
 
+
 def test_rate_limit_returns_503_when_redis_fails():
-    with patch(
-        "core.rate_limit.rate_limit_script",
-        side_effect=RedisError("Redis unavailable"),
+    with (
+        patch(
+            "core.rate_limit.rate_limit_script",
+            side_effect=RedisError("Redis unavailable"),
+        ),
+        pytest.raises(HTTPException) as exc_info,
     ):
-        with pytest.raises(HTTPException) as exc_info:
-            check_rate_limit(
-                key="test:redis_failure",
-                limit=5,
-                window=60,
-            )
+        check_rate_limit(
+            key="test:redis_failure",
+            limit=5,
+            window=60,
+        )
 
     assert exc_info.value.status_code == 503

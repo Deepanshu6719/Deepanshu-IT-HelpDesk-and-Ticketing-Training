@@ -7,6 +7,7 @@ domain rules that decide WHO may do WHAT:
 * admins see everything, set priority/status and assign agents (with 5 assignment rules)
 * deleting is a "soft delete": the row stays but disappears from every API response
 """
+
 import pytest
 
 from models.ticket import Ticket
@@ -33,7 +34,9 @@ def test_requester_creates_ticket(
     client, db_session, requester_user, requester_headers, category
 ):
     response = client.post(
-        "/tickets", json=ticket_payload(category, priority="high"), headers=requester_headers
+        "/tickets",
+        json=ticket_payload(category, priority="high"),
+        headers=requester_headers,
     )
 
     assert response.status_code == 201
@@ -46,7 +49,9 @@ def test_requester_creates_ticket(
     assert body["category"]["name"] == category.name
 
     stored = db_session.get(Ticket, body["id"])
-    assert stored.department_id == category.department_id  # department comes from the category
+    assert (
+        stored.department_id == category.department_id
+    )  # department comes from the category
     assert stored.is_deleted is False
 
 
@@ -61,19 +66,29 @@ def test_priority_defaults_to_medium(client, requester_headers, category):
 
 
 def test_creating_a_ticket_notifies_requester_and_active_admins_only(
-    client, notifications, requester_user, requester_headers, admin_user,
-    make_user, department, category,
+    client,
+    notifications,
+    requester_user,
+    requester_headers,
+    admin_user,
+    make_user,
+    department,
+    category,
 ):
     inactive_admin = make_user(department, role="admin", is_active=False)
 
-    response = client.post("/tickets", json=ticket_payload(category), headers=requester_headers)
+    response = client.post(
+        "/tickets", json=ticket_payload(category), headers=requester_headers
+    )
 
     assert response.status_code == 201
     assert notifications.recipients == {requester_user.email, admin_user.email}
     assert inactive_admin.email not in notifications.recipients
 
 
-def test_create_ticket_with_unknown_category_returns_422(client, requester_headers, category):
+def test_create_ticket_with_unknown_category_returns_422(
+    client, requester_headers, category
+):
     payload = ticket_payload(category, category="Does Not Exist")
 
     response = client.post("/tickets", json=payload, headers=requester_headers)
@@ -81,12 +96,15 @@ def test_create_ticket_with_unknown_category_returns_422(client, requester_heade
     assert response.status_code == 422
     assert response.json()["detail"] == "Invalid or inactive category"
 
+
 def test_cannot_create_ticket_in_deactivated_category(
     client, requester_headers, make_category, department
 ):
     retired = make_category(department, "Legacy Fax Machines", is_active=False)
 
-    response = client.post("/tickets", json=ticket_payload(retired), headers=requester_headers)
+    response = client.post(
+        "/tickets", json=ticket_payload(retired), headers=requester_headers
+    )
 
     assert response.status_code == 422
 
@@ -107,7 +125,9 @@ def test_create_ticket_with_invalid_payload_returns_422(
     client, requester_headers, category, overrides
 ):
     response = client.post(
-        "/tickets", json=ticket_payload(category, **overrides), headers=requester_headers
+        "/tickets",
+        json=ticket_payload(category, **overrides),
+        headers=requester_headers,
     )
 
     assert response.status_code == 422
@@ -204,7 +224,9 @@ def test_non_numeric_ticket_id_returns_422(client, admin_headers):
     assert client.get("/tickets/abc", headers=admin_headers).status_code == 422
 
 
-def test_get_ticket_requires_authentication(client, requester_user, category, make_ticket):
+def test_get_ticket_requires_authentication(
+    client, requester_user, category, make_ticket
+):
     ticket = make_ticket(requester_user, category)
 
     assert client.get(f"/tickets/{ticket.id}").status_code == 401
@@ -216,7 +238,13 @@ def ids_of(response):
 
 
 def test_requester_only_sees_own_tickets(
-    client, requester_user, requester_headers, category, make_ticket, make_user, department
+    client,
+    requester_user,
+    requester_headers,
+    category,
+    make_ticket,
+    make_user,
+    department,
 ):
     mine = make_ticket(requester_user, category, title="My own ticket")
     make_ticket(make_user(department), category, title="Somebody else's ticket")
@@ -231,7 +259,9 @@ def test_requester_only_sees_own_tickets(
 def test_agent_sees_assigned_and_own_tickets_only(
     client, requester_user, agent_user, agent_headers, category, make_ticket
 ):
-    assigned = make_ticket(requester_user, category, title="Assigned to agent", assigned_to=agent_user)
+    assigned = make_ticket(
+        requester_user, category, title="Assigned to agent", assigned_to=agent_user
+    )
     own = make_ticket(agent_user, category, title="Requested by agent")
     make_ticket(requester_user, category, title="Unrelated ticket")
 
@@ -269,7 +299,13 @@ def test_soft_deleted_tickets_are_excluded_from_list_and_total(
 def test_empty_list_has_zero_total_and_zero_pages(client, requester_headers):
     body = client.get("/tickets", headers=requester_headers).json()
 
-    assert body == {"items": [], "total": 0, "page": 1, "page_size": 10, "total_pages": 0}
+    assert body == {
+        "items": [],
+        "total": 0,
+        "page": 1,
+        "page_size": 10,
+        "total_pages": 0,
+    }
 
 
 def test_tickets_are_listed_newest_first_and_paginated(
@@ -279,22 +315,40 @@ def test_tickets_are_listed_newest_first_and_paginated(
     middle = make_ticket(requester_user, category, title="Middle ticket")
     newest = make_ticket(requester_user, category, title="Newest ticket")
 
-    page_1 = client.get("/tickets", params={"page": 1, "page_size": 2}, headers=requester_headers)
-    page_2 = client.get("/tickets", params={"page": 2, "page_size": 2}, headers=requester_headers)
+    page_1 = client.get(
+        "/tickets", params={"page": 1, "page_size": 2}, headers=requester_headers
+    )
+    page_2 = client.get(
+        "/tickets", params={"page": 2, "page_size": 2}, headers=requester_headers
+    )
 
     body = page_1.json()
-    assert (body["total"], body["page"], body["page_size"], body["total_pages"]) == (3, 1, 2, 2)
+    assert (body["total"], body["page"], body["page_size"], body["total_pages"]) == (
+        3,
+        1,
+        2,
+        2,
+    )
     assert ids_of(page_1) == [newest.id, middle.id]
     assert ids_of(page_2) == [oldest.id]
 
 
 @pytest.mark.parametrize(
     "params",
-    [{"page": 0}, {"page_size": 0}, {"page_size": 101}, {"status_filter": "done"},
-     {"priority_filter": "critical"}, {"category_id": 0}],
+    [
+        {"page": 0},
+        {"page_size": 0},
+        {"page_size": 101},
+        {"status_filter": "done"},
+        {"priority_filter": "critical"},
+        {"category_id": 0},
+    ],
 )
 def test_list_rejects_invalid_query_parameters(client, requester_headers, params):
-    assert client.get("/tickets", params=params, headers=requester_headers).status_code == 422
+    assert (
+        client.get("/tickets", params=params, headers=requester_headers).status_code
+        == 422
+    )
 
 
 def test_filter_by_status_and_priority(
@@ -302,26 +356,47 @@ def test_filter_by_status_and_priority(
 ):
     open_low = make_ticket(requester_user, category, title="Open low", priority="low")
     resolved_high = make_ticket(
-        requester_user, category, title="Resolved high", priority="high", status="resolved"
+        requester_user,
+        category,
+        title="Resolved high",
+        priority="high",
+        status="resolved",
     )
 
-    by_status = client.get("/tickets", params={"status_filter": "resolved"}, headers=requester_headers)
-    by_priority = client.get("/tickets", params={"priority_filter": "low"}, headers=requester_headers)
+    by_status = client.get(
+        "/tickets", params={"status_filter": "resolved"}, headers=requester_headers
+    )
+    by_priority = client.get(
+        "/tickets", params={"priority_filter": "low"}, headers=requester_headers
+    )
 
     assert ids_of(by_status) == [resolved_high.id]
     assert ids_of(by_priority) == [open_low.id]
 
 
 def test_filter_by_category_and_department(
-    client, requester_user, requester_headers, category, make_category,
-    other_department, make_ticket,
+    client,
+    requester_user,
+    requester_headers,
+    category,
+    make_category,
+    other_department,
+    make_ticket,
 ):
     other_category = make_category(other_department, "Cleaning")
     in_it = make_ticket(requester_user, category, title="IT ticket")
-    in_facilities = make_ticket(requester_user, other_category, title="Facilities ticket")
+    in_facilities = make_ticket(
+        requester_user, other_category, title="Facilities ticket"
+    )
 
-    by_category = client.get("/tickets", params={"category_id": other_category.id}, headers=requester_headers)
-    by_department = client.get("/tickets", params={"department_id": category.department_id}, headers=requester_headers)
+    by_category = client.get(
+        "/tickets", params={"category_id": other_category.id}, headers=requester_headers
+    )
+    by_department = client.get(
+        "/tickets",
+        params={"department_id": category.department_id},
+        headers=requester_headers,
+    )
 
     assert ids_of(by_category) == [in_facilities.id]
     assert ids_of(by_department) == [in_it.id]
@@ -332,32 +407,51 @@ def test_search_matches_title_and_description_case_insensitively(
 ):
     by_title = make_ticket(requester_user, category, title="VPN connection drops")
     by_description = make_ticket(
-        requester_user, category, title="Cannot work remotely",
+        requester_user,
+        category,
+        title="Cannot work remotely",
         description="The vpn client disconnects every hour.",
     )
     make_ticket(requester_user, category, title="Printer jam")
 
-    response = client.get("/tickets", params={"search": "Vpn"}, headers=requester_headers)
+    response = client.get(
+        "/tickets", params={"search": "Vpn"}, headers=requester_headers
+    )
 
     assert set(ids_of(response)) == {by_title.id, by_description.id}
 
 
 def test_search_with_only_whitespace_returns_422(client, requester_headers):
-    response = client.get("/tickets", params={"search": "   "}, headers=requester_headers)
+    response = client.get(
+        "/tickets", params={"search": "   "}, headers=requester_headers
+    )
 
     assert response.status_code == 422
 
 
 def test_only_admins_can_filter_by_assigned_agent(
-    client, requester_user, agent_user, requester_headers, agent_headers,
-    admin_headers, category, make_ticket,
+    client,
+    requester_user,
+    agent_user,
+    requester_headers,
+    agent_headers,
+    admin_headers,
+    category,
+    make_ticket,
 ):
-    assigned = make_ticket(requester_user, category, title="Assigned one", assigned_to=agent_user)
+    assigned = make_ticket(
+        requester_user, category, title="Assigned one", assigned_to=agent_user
+    )
     make_ticket(requester_user, category, title="Unassigned one")
     params = {"assigned_to": agent_user.id}
 
-    assert client.get("/tickets", params=params, headers=requester_headers).status_code == 403
-    assert client.get("/tickets", params=params, headers=agent_headers).status_code == 403
+    assert (
+        client.get("/tickets", params=params, headers=requester_headers).status_code
+        == 403
+    )
+    assert (
+        client.get("/tickets", params=params, headers=agent_headers).status_code == 403
+    )
     admin_response = client.get("/tickets", params=params, headers=admin_headers)
     assert admin_response.status_code == 200
     assert ids_of(admin_response) == [assigned.id]
@@ -399,8 +493,14 @@ def test_changing_requested_priority_does_not_change_real_priority(
 
 
 def test_changing_category_also_moves_the_ticket_to_that_categorys_department(
-    client, db_session, requester_user, requester_headers, category,
-    make_category, other_department, make_ticket,
+    client,
+    db_session,
+    requester_user,
+    requester_headers,
+    category,
+    make_category,
+    other_department,
+    make_ticket,
 ):
     new_category = make_category(other_department, "Cleaning")
     ticket = make_ticket(requester_user, category)
@@ -444,7 +544,9 @@ def test_update_with_one_forbidden_field_changes_nothing(
 ):
     ticket = make_ticket(requester_user, category, title="Original title")
 
-    response = patch(client, ticket, requester_headers, title="Sneaky new title", status="closed")
+    response = patch(
+        client, ticket, requester_headers, title="Sneaky new title", status="closed"
+    )
 
     assert response.status_code == 403
     db_session.refresh(ticket)
@@ -457,7 +559,10 @@ def test_requester_loses_edit_rights_once_ticket_is_assigned(
 ):
     ticket = make_ticket(requester_user, category, assigned_to=agent_user)
 
-    assert patch(client, ticket, requester_headers, title="Too late to edit").status_code == 404
+    assert (
+        patch(client, ticket, requester_headers, title="Too late to edit").status_code
+        == 404
+    )
 
 
 def test_requester_loses_edit_rights_once_work_has_started(
@@ -465,7 +570,10 @@ def test_requester_loses_edit_rights_once_work_has_started(
 ):
     ticket = make_ticket(requester_user, category, status="under_review")
 
-    assert patch(client, ticket, requester_headers, title="Too late to edit").status_code == 404
+    assert (
+        patch(client, ticket, requester_headers, title="Too late to edit").status_code
+        == 404
+    )
 
 
 def test_other_requester_cannot_edit_ticket(
@@ -474,7 +582,10 @@ def test_other_requester_cannot_edit_ticket(
     ticket = make_ticket(requester_user, category)
     stranger_headers = auth_headers(make_user(department))
 
-    assert patch(client, ticket, stranger_headers, title="Hijacked title").status_code == 404
+    assert (
+        patch(client, ticket, stranger_headers, title="Hijacked title").status_code
+        == 404
+    )
 
 
 # ---- agent rules ---- #
@@ -516,7 +627,9 @@ def test_admin_can_set_priority_and_status(
 ):
     ticket = make_ticket(requester_user, category)
 
-    body = patch(client, ticket, admin_headers, priority="urgent", status="under_review").json()
+    body = patch(
+        client, ticket, admin_headers, priority="urgent", status="under_review"
+    ).json()
 
     assert body["priority"] == "urgent"
     assert body["status"] == "under_review"
@@ -527,7 +640,10 @@ def test_admin_cannot_edit_the_content_of_someone_elses_ticket(
 ):
     ticket = make_ticket(requester_user, category)
 
-    assert patch(client, ticket, admin_headers, title="Admin rewrote it").status_code == 403
+    assert (
+        patch(client, ticket, admin_headers, title="Admin rewrote it").status_code
+        == 403
+    )
 
 
 def test_admin_can_edit_content_of_their_own_open_unassigned_ticket(
@@ -535,7 +651,10 @@ def test_admin_can_edit_content_of_their_own_open_unassigned_ticket(
 ):
     ticket = make_ticket(admin_user, category)
 
-    assert patch(client, ticket, admin_headers, title="Admin edits own ticket").status_code == 200
+    assert (
+        patch(client, ticket, admin_headers, title="Admin edits own ticket").status_code
+        == 200
+    )
 
 
 def test_admin_cannot_edit_content_of_their_own_ticket_once_assigned(
@@ -543,7 +662,10 @@ def test_admin_cannot_edit_content_of_their_own_ticket_once_assigned(
 ):
     ticket = make_ticket(admin_user, category, assigned_to=agent_user)
 
-    assert patch(client, ticket, admin_headers, title="Too late to edit").status_code == 403
+    assert (
+        patch(client, ticket, admin_headers, title="Too late to edit").status_code
+        == 403
+    )
 
 
 # ---- general PATCH validation ---- #
@@ -593,20 +715,34 @@ def test_update_unknown_or_deleted_ticket_returns_404(
     deleted = make_ticket(requester_user, category)
     mark_deleted(db_session, deleted)
 
-    assert client.patch("/tickets/999999", json={"status": "closed"}, headers=admin_headers).status_code == 404
+    assert (
+        client.patch(
+            "/tickets/999999", json={"status": "closed"}, headers=admin_headers
+        ).status_code
+        == 404
+    )
     assert patch(client, deleted, admin_headers, status="closed").status_code == 404
 
 
 def test_update_requires_authentication(client, requester_user, category, make_ticket):
     ticket = make_ticket(requester_user, category)
 
-    assert client.patch(f"/tickets/{ticket.id}", json={"status": "closed"}).status_code == 401
+    assert (
+        client.patch(f"/tickets/{ticket.id}", json={"status": "closed"}).status_code
+        == 401
+    )
 
 
 # ---- ASSIGNING AN AGENT: the domain-specific rules ---- #
 def test_admin_assigns_agent_and_both_people_are_notified(
-    client, db_session, notifications, requester_user, agent_user,
-    admin_headers, category, make_ticket,
+    client,
+    db_session,
+    notifications,
+    requester_user,
+    agent_user,
+    admin_headers,
+    category,
+    make_ticket,
 ):
     ticket = make_ticket(requester_user, category)
 
@@ -630,7 +766,14 @@ def test_cannot_assign_a_user_that_does_not_exist(
 
 
 def test_cannot_assign_a_user_who_is_not_an_agent(
-    client, requester_user, admin_user, admin_headers, category, make_ticket, make_user, department
+    client,
+    requester_user,
+    admin_user,
+    admin_headers,
+    category,
+    make_ticket,
+    make_user,
+    department,
 ):
     ticket = make_ticket(requester_user, category)
     plain_user = make_user(department)
@@ -651,7 +794,9 @@ def test_requester_cannot_be_assigned_as_their_own_agent(
     response = patch(client, ticket, admin_headers, assigned_to=agent_who_requested.id)
 
     assert response.status_code == 422
-    assert response.json()["detail"] == "Requester cannot be assigned as their own agent"
+    assert (
+        response.json()["detail"] == "Requester cannot be assigned as their own agent"
+    )
 
 
 def test_cannot_assign_an_inactive_agent(
@@ -667,7 +812,13 @@ def test_cannot_assign_an_inactive_agent(
 
 
 def test_cannot_assign_an_agent_from_a_different_department(
-    client, requester_user, admin_headers, category, make_ticket, make_user, other_department
+    client,
+    requester_user,
+    admin_headers,
+    category,
+    make_ticket,
+    make_user,
+    other_department,
 ):
     facilities_agent = make_user(other_department, role="agent")
     ticket = make_ticket(requester_user, category)  # ticket belongs to IT Support
@@ -679,8 +830,15 @@ def test_cannot_assign_an_agent_from_a_different_department(
 
 
 def test_failed_assignment_leaves_ticket_unassigned_and_sends_no_notifications(
-    client, db_session, notifications, requester_user, admin_headers, category,
-    make_ticket, make_user, other_department,
+    client,
+    db_session,
+    notifications,
+    requester_user,
+    admin_headers,
+    category,
+    make_ticket,
+    make_user,
+    other_department,
 ):
     facilities_agent = make_user(other_department, role="agent")
     ticket = make_ticket(requester_user, category)
@@ -693,7 +851,13 @@ def test_failed_assignment_leaves_ticket_unassigned_and_sends_no_notifications(
 
 
 def test_reassigning_the_same_agent_sends_no_new_notifications(
-    client, notifications, requester_user, agent_user, admin_headers, category, make_ticket
+    client,
+    notifications,
+    requester_user,
+    agent_user,
+    admin_headers,
+    category,
+    make_ticket,
 ):
     ticket = make_ticket(requester_user, category, assigned_to=agent_user)
 
@@ -704,7 +868,13 @@ def test_reassigning_the_same_agent_sends_no_new_notifications(
 
 
 def test_admin_can_unassign_a_ticket(
-    client, notifications, requester_user, agent_user, admin_headers, category, make_ticket
+    client,
+    notifications,
+    requester_user,
+    agent_user,
+    admin_headers,
+    category,
+    make_ticket,
 ):
     ticket = make_ticket(requester_user, category, assigned_to=agent_user)
 
@@ -733,7 +903,10 @@ def test_requester_soft_deletes_own_open_unassigned_ticket(
     assert row.is_deleted is True
     assert row.deleted_at is not None
     # ...and has vanished from the API.
-    assert client.get(f"/tickets/{ticket_id}", headers=requester_headers).status_code == 404
+    assert (
+        client.get(f"/tickets/{ticket_id}", headers=requester_headers).status_code
+        == 404
+    )
     assert ids_of(client.get("/tickets", headers=requester_headers)) == []
 
 
@@ -742,8 +915,14 @@ def test_deleting_twice_returns_404_the_second_time(
 ):
     ticket = make_ticket(requester_user, category)
 
-    assert client.delete(f"/tickets/{ticket.id}", headers=requester_headers).status_code == 204
-    assert client.delete(f"/tickets/{ticket.id}", headers=requester_headers).status_code == 404
+    assert (
+        client.delete(f"/tickets/{ticket.id}", headers=requester_headers).status_code
+        == 204
+    )
+    assert (
+        client.delete(f"/tickets/{ticket.id}", headers=requester_headers).status_code
+        == 404
+    )
 
 
 def test_requester_cannot_delete_assigned_ticket(
@@ -751,7 +930,10 @@ def test_requester_cannot_delete_assigned_ticket(
 ):
     ticket = make_ticket(requester_user, category, assigned_to=agent_user)
 
-    assert client.delete(f"/tickets/{ticket.id}", headers=requester_headers).status_code == 404
+    assert (
+        client.delete(f"/tickets/{ticket.id}", headers=requester_headers).status_code
+        == 404
+    )
 
 
 def test_requester_cannot_delete_ticket_once_work_has_started(
@@ -759,7 +941,10 @@ def test_requester_cannot_delete_ticket_once_work_has_started(
 ):
     ticket = make_ticket(requester_user, category, status="in_progress")
 
-    assert client.delete(f"/tickets/{ticket.id}", headers=requester_headers).status_code == 404
+    assert (
+        client.delete(f"/tickets/{ticket.id}", headers=requester_headers).status_code
+        == 404
+    )
 
 
 def test_other_requester_cannot_delete_ticket(
@@ -768,7 +953,10 @@ def test_other_requester_cannot_delete_ticket(
     ticket = make_ticket(requester_user, category)
     stranger_headers = auth_headers(make_user(department))
 
-    assert client.delete(f"/tickets/{ticket.id}", headers=stranger_headers).status_code == 404
+    assert (
+        client.delete(f"/tickets/{ticket.id}", headers=stranger_headers).status_code
+        == 404
+    )
 
 
 def test_assigned_agent_cannot_delete_ticket(
@@ -776,15 +964,21 @@ def test_assigned_agent_cannot_delete_ticket(
 ):
     ticket = make_ticket(requester_user, category, assigned_to=agent_user)
 
-    assert client.delete(f"/tickets/{ticket.id}", headers=agent_headers).status_code == 404
+    assert (
+        client.delete(f"/tickets/{ticket.id}", headers=agent_headers).status_code == 404
+    )
 
 
 def test_admin_can_delete_any_ticket_even_in_progress(
     client, requester_user, agent_user, admin_headers, category, make_ticket
 ):
-    ticket = make_ticket(requester_user, category, status="in_progress", assigned_to=agent_user)
+    ticket = make_ticket(
+        requester_user, category, status="in_progress", assigned_to=agent_user
+    )
 
-    assert client.delete(f"/tickets/{ticket.id}", headers=admin_headers).status_code == 204
+    assert (
+        client.delete(f"/tickets/{ticket.id}", headers=admin_headers).status_code == 204
+    )
 
 
 def test_delete_unknown_ticket_returns_404(client, admin_headers):

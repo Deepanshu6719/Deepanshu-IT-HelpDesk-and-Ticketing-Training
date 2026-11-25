@@ -2,8 +2,9 @@
 Authentication: login, refresh-token rotation (with reuse detection), logout,
 and every way an access token can be rejected by get_current_user.
 """
+
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import jwt
 import pytest
@@ -34,7 +35,7 @@ def refresh(client, refresh_token):
 
 
 def in_the_past():
-    return datetime.now(timezone.utc) - timedelta(minutes=1)
+    return datetime.now(UTC) - timedelta(minutes=1)
 
 
 # ================================== LOGIN ================================== #
@@ -86,7 +87,9 @@ def test_login_does_not_reveal_whether_the_email_exists(client, requester_user):
     assert unknown_email.json() == wrong_password.json()
 
 
-def test_deactivated_user_cannot_log_in(client, make_user, department, default_password):
+def test_deactivated_user_cannot_log_in(
+    client, make_user, department, default_password
+):
     inactive = make_user(department, is_active=False)
 
     response = login(client, inactive.email, default_password)
@@ -127,7 +130,10 @@ def test_refresh_rotates_the_token_and_links_old_to_new(
     assert new_record.revoked_at is None
 
     # the new access token is usable
-    assert client.get("/tickets", headers=bearer(new_tokens["access_token"])).status_code == 200
+    assert (
+        client.get("/tickets", headers=bearer(new_tokens["access_token"])).status_code
+        == 200
+    )
 
 
 def test_refresh_with_unknown_token_returns_401(client):
@@ -155,7 +161,10 @@ def test_reusing_an_old_refresh_token_revokes_the_whole_session(
     # Even the legitimately-issued newest token is now dead...
     assert refresh(client, newest["refresh_token"]).status_code == 401
     # ...and so is the newest access token.
-    assert client.get("/tickets", headers=bearer(newest["access_token"])).status_code == 401
+    assert (
+        client.get("/tickets", headers=bearer(newest["access_token"])).status_code
+        == 401
+    )
     assert db_session.scalar(select(UserSession)).revoked_at is not None
 
 
@@ -230,8 +239,13 @@ def test_logout_only_ends_the_current_device_session(
 
     client.post("/auth/logout", headers=bearer(phone["access_token"]))
 
-    assert client.get("/tickets", headers=bearer(phone["access_token"])).status_code == 401
-    assert client.get("/tickets", headers=bearer(laptop["access_token"])).status_code == 200
+    assert (
+        client.get("/tickets", headers=bearer(phone["access_token"])).status_code == 401
+    )
+    assert (
+        client.get("/tickets", headers=bearer(laptop["access_token"])).status_code
+        == 200
+    )
 
 
 # ===================== ACCESS-TOKEN VALIDATION (get_current_user) ===================== #
@@ -279,7 +293,7 @@ def test_token_signed_with_wrong_secret_returns_401(client, requester_user):
             "sub": str(requester_user.id),
             "ver": requester_user.token_version,
             "sid": str(uuid.uuid4()),
-            "exp": datetime.now(timezone.utc) + timedelta(minutes=5),
+            "exp": datetime.now(UTC) + timedelta(minutes=5),
         },
         "a-completely-different-secret-key-1234567890",
         algorithm=settings.ALGORITHM,
@@ -302,8 +316,12 @@ def test_token_signed_with_wrong_secret_returns_401(client, requester_user):
         ({"sid": str(uuid.uuid4())}, "Session is no longer valid"),  # unknown session
     ],
 )
-def test_token_with_bad_claims_is_rejected(client, requester_user, overrides, expected_detail):
-    response = client.get("/tickets", headers=bearer(build_token(requester_user, **overrides)))
+def test_token_with_bad_claims_is_rejected(
+    client, requester_user, overrides, expected_detail
+):
+    response = client.get(
+        "/tickets", headers=bearer(build_token(requester_user, **overrides))
+    )
 
     assert response.status_code == 401
     assert response.json()["detail"] == expected_detail
@@ -340,7 +358,7 @@ def test_valid_token_is_rejected_after_user_is_deactivated(
 def test_token_is_rejected_when_its_session_was_revoked(
     client, db_session, requester_user, requester_headers
 ):
-    db_session.scalar(select(UserSession)).revoked_at = datetime.now(timezone.utc)
+    db_session.scalar(select(UserSession)).revoked_at = datetime.now(UTC)
     db_session.commit()
 
     response = client.get("/tickets", headers=requester_headers)

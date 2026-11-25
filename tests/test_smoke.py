@@ -1,4 +1,5 @@
 """Step 1 of the module: prove the test setup works end-to-end."""
+
 from sqlalchemy import select, text
 
 from core.config import settings
@@ -33,10 +34,14 @@ def test_tests_run_on_the_test_database_not_the_dev_database(db_session):
 def test_isolation_part_1_writes_a_row(db_session, make_department):
     make_department("Isolation Check")
 
-    assert db_session.scalar(select(Department).where(Department.name == "Isolation Check"))
+    assert db_session.scalar(
+        select(Department).where(Department.name == "Isolation Check")
+    )
 
 
 def test_isolation_part_2_row_from_previous_test_is_gone(db_session):
-    leftover = db_session.scalar(select(Department).where(Department.name == "Isolation Check"))
+    leftover = db_session.scalar(
+        select(Department).where(Department.name == "Isolation Check")
+    )
 
     assert leftover is None

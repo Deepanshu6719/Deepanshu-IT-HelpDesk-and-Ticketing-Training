@@ -2,7 +2,8 @@
 Pure unit tests: no database, no HTTP. They are fast and pinpoint exactly which
 function is broken (hashing, JWTs, schema validation, permission helpers).
 """
-from datetime import datetime, timedelta, timezone
+
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import jwt
@@ -52,12 +53,12 @@ def test_access_token_round_trip_keeps_claims_and_sets_expiry():
     assert payload["sub"] == "42"
     assert payload["ver"] == 3
     assert payload["sid"] == "abc"
-    assert payload["exp"] > datetime.now(timezone.utc).timestamp()
+    assert payload["exp"] > datetime.now(UTC).timestamp()
 
 
 def test_expired_access_token_is_rejected():
     expired = jwt.encode(
-        {"sub": "1", "exp": datetime.now(timezone.utc) - timedelta(minutes=1)},
+        {"sub": "1", "exp": datetime.now(UTC) - timedelta(minutes=1)},
         settings.SECRET_KEY,
         algorithm=settings.ALGORITHM,
     )
@@ -68,7 +69,7 @@ def test_expired_access_token_is_rejected():
 
 def test_access_token_signed_with_another_key_is_rejected():
     forged = jwt.encode(
-        {"sub": "1", "exp": datetime.now(timezone.utc) + timedelta(minutes=5)},
+        {"sub": "1", "exp": datetime.now(UTC) + timedelta(minutes=5)},
         "some-other-secret-key-that-is-long-enough-123456",
         algorithm=settings.ALGORITHM,
     )
@@ -166,7 +167,9 @@ def test_comment_create_strips_message_and_rejects_blank_or_huge_messages():
 def fake_user(user_id, *role_names):
     return SimpleNamespace(
         id=user_id,
-        role_assignments=[SimpleNamespace(role=SimpleNamespace(name=n)) for n in role_names],
+        role_assignments=[
+            SimpleNamespace(role=SimpleNamespace(name=n)) for n in role_names
+        ],
     )
 
 
@@ -191,7 +194,9 @@ def test_has_role_checks_role_names():
     ],
 )
 def test_check_ticket_access_allows_admin_requester_and_assigned_agent(user):
-    check_ticket_access(fake_ticket(requester_id=10, assigned_to=20), user)  # must not raise
+    check_ticket_access(
+        fake_ticket(requester_id=10, assigned_to=20), user
+    )  # must not raise
 
 
 @pytest.mark.parametrize(
@@ -205,4 +210,6 @@ def test_check_ticket_access_hides_ticket_from_everyone_else_with_404(user):
     with pytest.raises(HTTPException) as error:
         check_ticket_access(fake_ticket(requester_id=10, assigned_to=20), user)
 
-    assert error.value.status_code == 404  # 404, not 403: don't reveal the ticket exists
+    assert (
+        error.value.status_code == 404
+    )  # 404, not 403: don't reveal the ticket exists

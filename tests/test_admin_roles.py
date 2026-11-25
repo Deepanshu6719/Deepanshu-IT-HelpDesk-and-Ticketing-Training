@@ -1,11 +1,14 @@
 """POST /admin/users/{id}/roles - role assignment and its domain rule: admin requires agent first."""
+
 import pytest
 
 from core.permissions import has_role
 
 
 def assign(client, user_id, role, headers):
-    return client.post(f"/admin/users/{user_id}/roles", json={"role": role}, headers=headers)
+    return client.post(
+        f"/admin/users/{user_id}/roles", json={"role": role}, headers=headers
+    )
 
 
 def test_admin_assigns_agent_role(client, db_session, admin_headers, requester_user):
@@ -39,7 +42,9 @@ def test_agent_can_be_promoted_to_admin(client, db_session, admin_headers, agent
 def test_assigning_the_same_role_twice_returns_409(
     client, db_session, admin_headers, requester_user
 ):
-    url_user_id = requester_user.id  # read the id now: expunge_all() below detaches objects
+    url_user_id = (
+        requester_user.id
+    )  # read the id now: expunge_all() below detaches objects
     assert assign(client, url_user_id, "agent", admin_headers).status_code == 201
 
     # In production every request gets a brand-new session. Clearing the identity map makes
@@ -56,7 +61,10 @@ def test_assign_role_to_unknown_user_returns_404(client, admin_headers):
 
 
 def test_assign_invalid_role_returns_422(client, admin_headers, requester_user):
-    assert assign(client, requester_user.id, "superadmin", admin_headers).status_code == 422
+    assert (
+        assign(client, requester_user.id, "superadmin", admin_headers).status_code
+        == 422
+    )
 
 
 @pytest.mark.parametrize("headers_fixture", ["requester_headers", "agent_headers"])
@@ -67,6 +75,8 @@ def test_only_admins_can_assign_roles(client, request, requester_user, headers_f
 
 
 def test_assign_role_requires_authentication(client, requester_user):
-    response = client.post(f"/admin/users/{requester_user.id}/roles", json={"role": "agent"})
+    response = client.post(
+        f"/admin/users/{requester_user.id}/roles", json={"role": "agent"}
+    )
 
     assert response.status_code == 401

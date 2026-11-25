@@ -1,6 +1,7 @@
-from pydantic import BaseModel, Field, ConfigDict, field_validator
 from datetime import datetime
-from schema.ticket_schema import UserSummary
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
 
 class CommentCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -19,11 +20,13 @@ class CommentCreate(BaseModel):
 
         return value
 
+
 class CommentAuthor(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     email: str
+
 
 class CommentResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -31,7 +34,7 @@ class CommentResponse(BaseModel):
     id: int
     ticket_id: int
     user_id: int
-    author:CommentAuthor
+    author: CommentAuthor
     message: str
     is_internal: bool
     created_at: datetime

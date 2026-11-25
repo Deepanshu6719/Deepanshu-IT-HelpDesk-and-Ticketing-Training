@@ -2,6 +2,7 @@
 Ticket comments. Domain rule worth protecting: INTERNAL notes are staff-only and must
 never leak to the requester - neither when posting nor when reading.
 """
+
 import pytest
 
 
@@ -16,7 +17,9 @@ def test_requester_posts_public_comment_on_own_ticket(
     ticket = make_ticket(requester_user, category)
 
     response = client.post(
-        comments_url(ticket), json={"message": "  Still broken, please help  "}, headers=requester_headers
+        comments_url(ticket),
+        json={"message": "  Still broken, please help  "},
+        headers=requester_headers,
     )
 
     assert response.status_code == 201
@@ -40,17 +43,27 @@ def test_requester_cannot_post_internal_comment(
     )
 
     assert response.status_code == 403
-    assert response.json()["detail"] == "You are not allowed to create internal comments"
+    assert (
+        response.json()["detail"] == "You are not allowed to create internal comments"
+    )
 
 
 def test_assigned_agent_and_admin_can_post_internal_comments(
-    client, requester_user, agent_user, agent_headers, admin_headers, category, make_ticket
+    client,
+    requester_user,
+    agent_user,
+    agent_headers,
+    admin_headers,
+    category,
+    make_ticket,
 ):
     ticket = make_ticket(requester_user, category, assigned_to=agent_user)
 
     for headers in (agent_headers, admin_headers):
         response = client.post(
-            comments_url(ticket), json={"message": "Internal note", "is_internal": True}, headers=headers
+            comments_url(ticket),
+            json={"message": "Internal note", "is_internal": True},
+            headers=headers,
         )
 
         assert response.status_code == 201
@@ -63,7 +76,9 @@ def test_stranger_cannot_comment_on_someone_elses_ticket(
     ticket = make_ticket(requester_user, category)
     stranger_headers = auth_headers(make_user(department))
 
-    response = client.post(comments_url(ticket), json={"message": "Hello?"}, headers=stranger_headers)
+    response = client.post(
+        comments_url(ticket), json={"message": "Hello?"}, headers=stranger_headers
+    )
 
     assert response.status_code == 404
 
@@ -73,7 +88,9 @@ def test_unassigned_agent_cannot_comment(
 ):
     ticket = make_ticket(requester_user, category)
 
-    response = client.post(comments_url(ticket), json={"message": "Hello?"}, headers=agent_headers)
+    response = client.post(
+        comments_url(ticket), json={"message": "Hello?"}, headers=agent_headers
+    )
 
     assert response.status_code == 404
 
@@ -85,8 +102,12 @@ def test_cannot_comment_on_unknown_or_deleted_ticket(
     deleted.is_deleted = True
     db_session.commit()
 
-    unknown = client.post("/tickets/999999/comments", json={"message": "Hi"}, headers=requester_headers)
-    removed = client.post(comments_url(deleted), json={"message": "Hi"}, headers=requester_headers)
+    unknown = client.post(
+        "/tickets/999999/comments", json={"message": "Hi"}, headers=requester_headers
+    )
+    removed = client.post(
+        comments_url(deleted), json={"message": "Hi"}, headers=requester_headers
+    )
 
     assert unknown.status_code == 404
     assert removed.status_code == 404
@@ -108,7 +129,9 @@ def test_invalid_comment_payload_returns_422(
 ):
     ticket = make_ticket(requester_user, category)
 
-    response = client.post(comments_url(ticket), json=payload, headers=requester_headers)
+    response = client.post(
+        comments_url(ticket), json=payload, headers=requester_headers
+    )
 
     assert response.status_code == 422
 
@@ -118,12 +141,16 @@ def test_comment_at_exactly_2000_characters_is_accepted(
 ):
     ticket = make_ticket(requester_user, category)
 
-    response = client.post(comments_url(ticket), json={"message": "x" * 2000}, headers=requester_headers)
+    response = client.post(
+        comments_url(ticket), json={"message": "x" * 2000}, headers=requester_headers
+    )
 
     assert response.status_code == 201
 
 
-def test_posting_a_comment_requires_authentication(client, requester_user, category, make_ticket):
+def test_posting_a_comment_requires_authentication(
+    client, requester_user, category, make_ticket
+):
     ticket = make_ticket(requester_user, category)
 
     assert client.post(comments_url(ticket), json={"message": "Hi"}).status_code == 401
@@ -144,7 +171,13 @@ def test_comments_are_returned_oldest_first(
 
 
 def test_requester_never_sees_internal_comments(
-    client, requester_user, agent_user, requester_headers, category, make_ticket, make_comment
+    client,
+    requester_user,
+    agent_user,
+    requester_headers,
+    category,
+    make_ticket,
+    make_comment,
 ):
     ticket = make_ticket(requester_user, category, assigned_to=agent_user)
     make_comment(ticket, requester_user, "public question")
@@ -159,8 +192,14 @@ def test_requester_never_sees_internal_comments(
 
 
 def test_agent_and_admin_see_internal_comments(
-    client, requester_user, agent_user, agent_headers, admin_headers, category,
-    make_ticket, make_comment,
+    client,
+    requester_user,
+    agent_user,
+    agent_headers,
+    admin_headers,
+    category,
+    make_ticket,
+    make_comment,
 ):
     ticket = make_ticket(requester_user, category, assigned_to=agent_user)
     make_comment(ticket, requester_user, "public question")
@@ -169,7 +208,10 @@ def test_agent_and_admin_see_internal_comments(
     for headers in (agent_headers, admin_headers):
         response = client.get(comments_url(ticket), headers=headers)
 
-        assert [c["message"] for c in response.json()] == ["public question", "internal diagnosis"]
+        assert [c["message"] for c in response.json()] == [
+            "public question",
+            "internal diagnosis",
+        ]
 
 
 def test_ticket_with_no_comments_returns_empty_list(
@@ -184,7 +226,14 @@ def test_ticket_with_no_comments_returns_empty_list(
 
 
 def test_stranger_cannot_read_comments(
-    client, requester_user, category, make_ticket, make_comment, make_user, department, auth_headers
+    client,
+    requester_user,
+    category,
+    make_ticket,
+    make_comment,
+    make_user,
+    department,
+    auth_headers,
 ):
     ticket = make_ticket(requester_user, category)
     make_comment(ticket, requester_user, "private details")
@@ -203,11 +252,15 @@ def test_cannot_read_comments_of_unknown_or_deleted_ticket(
     deleted.is_deleted = True
     db_session.commit()
 
-    assert client.get("/tickets/999999/comments", headers=admin_headers).status_code == 404
+    assert (
+        client.get("/tickets/999999/comments", headers=admin_headers).status_code == 404
+    )
     assert client.get(comments_url(deleted), headers=admin_headers).status_code == 404
 
 
-def test_reading_comments_requires_authentication(client, requester_user, category, make_ticket):
+def test_reading_comments_requires_authentication(
+    client, requester_user, category, make_ticket
+):
     ticket = make_ticket(requester_user, category)
 
     assert client.get(comments_url(ticket)).status_code == 401
