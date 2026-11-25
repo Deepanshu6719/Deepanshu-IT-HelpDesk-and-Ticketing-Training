@@ -1,15 +1,16 @@
-from sqlalchemy import String, Text, DateTime, ForeignKey, CheckConstraint
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING
+
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from datetime import datetime, timezone
 
 from models.base import Base
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from models.category import Category
     from models.department import Department
-    from models.user import User
     from models.ticket_comment import TicketComment
+    from models.user import User
 
 
 class Ticket(Base):
@@ -41,13 +42,13 @@ class Ticket(Base):
     status: Mapped[str] = mapped_column(String(20), default="open", nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
         nullable=False,
     )
     is_deleted: Mapped[bool] = mapped_column(default=False, nullable=False)

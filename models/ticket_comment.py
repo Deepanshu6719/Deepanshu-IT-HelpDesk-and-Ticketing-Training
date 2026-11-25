@@ -1,12 +1,16 @@
-from models.base import Base
-from sqlalchemy.orm import Mapped, mapped_column, relationship
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
-from sqlalchemy import Text, DateTime, Boolean, ForeignKey
+
+from sqlalchemy import Boolean, DateTime, ForeignKey, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from models.base import Base
 
 if TYPE_CHECKING:
     from models.ticket import Ticket
     from models.user import User
+
+
 class TicketComment(Base):
     __tablename__ = "ticket_comments"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -16,7 +20,7 @@ class TicketComment(Base):
     is_internal: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         nullable=False,
     )
     ticket: Mapped["Ticket"] = relationship(back_populates="comments")

@@ -1,22 +1,21 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
-from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
-from database.dependencies import get_db
-from core.dependencies import require_admin, get_current_user
-from core.security import get_password_hash, verify_password
+from core.dependencies import get_current_user, require_admin
 from core.pagination import Pagination
-from models.user import User
+from core.security import get_password_hash, verify_password
+from database.dependencies import get_db
 from models.department import Department
 from models.role import Role
+from models.user import User
 from models.user_role import UserRole
-
 from schema.user_schema import (
+    PasswordChange,
     UserCreate,
     UserResponse,
     UserStatusUpdate,
-    PasswordChange,
 )
 
 router = APIRouter(tags=["Users"])
@@ -87,12 +86,12 @@ def create_user(
         db.commit()
         db.refresh(new_user)
 
-    except IntegrityError:
+    except IntegrityError as exc:
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Could not create user. Email may already be registered.",
-        )
+        ) from exc
 
     return new_user
 
@@ -107,9 +106,7 @@ def get_all_users(
         select(User).order_by(User.id).offset(pagination.skip).limit(pagination.limit)
     )
 
-    users = db.scalars(statement).all()
-
-    return users
+    return db.scalars(statement).all()
 
 
 @router.get("/users/{user_id}", response_model=UserResponse)

@@ -1,5 +1,6 @@
 from fastapi import Query
 
+
 # Groups related pagination parameters into one reusable object.
 class Pagination:
     def __init__(

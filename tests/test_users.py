@@ -1,4 +1,5 @@
 """User management (admin only) and the "change my password" flow."""
+
 import pytest
 from sqlalchemy import select
 
@@ -24,7 +25,9 @@ def login(client, email, password):
 
 # ============================== POST /users ============================== #
 def test_admin_creates_requester(client, db_session, admin_headers, department):
-    response = client.post("/users", json=new_user_payload(department), headers=admin_headers)
+    response = client.post(
+        "/users", json=new_user_payload(department), headers=admin_headers
+    )
 
     assert response.status_code == 201
     body = response.json()
@@ -35,7 +38,9 @@ def test_admin_creates_requester(client, db_session, admin_headers, department):
     assert "password" not in body
     assert "hashed_password" not in body
 
-    created = db_session.scalar(select(User).where(User.email == "new.person@example.com"))
+    created = db_session.scalar(
+        select(User).where(User.email == "new.person@example.com")
+    )
     assert created.hashed_password != "StrongPass123!"
     assert verify_password("StrongPass123!", created.hashed_password)
     assert created.role_assignments == []  # plain requesters have no role row
@@ -50,7 +55,9 @@ def test_admin_creates_user_with_privileged_role(
     )
 
     assert response.status_code == 201
-    created = db_session.scalar(select(User).where(User.email == "new.person@example.com"))
+    created = db_session.scalar(
+        select(User).where(User.email == "new.person@example.com")
+    )
     assert has_role(created, role) is True
 
 
@@ -65,7 +72,9 @@ def test_create_user_with_existing_email_returns_409(
     assert response.json()["detail"] == "Email already registered"
 
 
-def test_create_user_in_unknown_department_returns_404(client, admin_headers, department):
+def test_create_user_in_unknown_department_returns_404(
+    client, admin_headers, department
+):
     payload = new_user_payload(department, department_id=999999)
 
     response = client.post("/users", json=payload, headers=admin_headers)
@@ -100,7 +109,10 @@ def test_create_user_requires_admin_role(
     payload = new_user_payload(department)
 
     assert client.post("/users", json=payload).status_code == 401
-    assert client.post("/users", json=payload, headers=requester_headers).status_code == 403
+    assert (
+        client.post("/users", json=payload, headers=requester_headers).status_code
+        == 403
+    )
     assert client.post("/users", json=payload, headers=agent_headers).status_code == 403
 
 
@@ -117,10 +129,16 @@ def test_admin_lists_users_in_id_order_with_pagination(
         requester_user.email,
     }
 
-    first_page = client.get("/users", params={"skip": 0, "limit": 2}, headers=admin_headers).json()
-    second_page = client.get("/users", params={"skip": 2, "limit": 2}, headers=admin_headers).json()
+    first_page = client.get(
+        "/users", params={"skip": 0, "limit": 2}, headers=admin_headers
+    ).json()
+    second_page = client.get(
+        "/users", params={"skip": 2, "limit": 2}, headers=admin_headers
+    ).json()
     assert len(first_page) == 2
-    assert [u["id"] for u in first_page + second_page] == ids[: len(first_page + second_page)]
+    assert [u["id"] for u in first_page + second_page] == ids[
+        : len(first_page + second_page)
+    ]
 
 
 @pytest.mark.parametrize("params", [{"limit": 0}, {"limit": 101}, {"skip": -1}])
@@ -145,15 +163,25 @@ def test_get_unknown_user_returns_404(client, admin_headers):
 
 
 def test_requester_cannot_read_other_users(client, requester_headers, admin_user):
-    assert client.get(f"/users/{admin_user.id}", headers=requester_headers).status_code == 403
+    assert (
+        client.get(f"/users/{admin_user.id}", headers=requester_headers).status_code
+        == 403
+    )
 
 
 # ======================== PATCH /users/{id}/status ======================== #
 def test_admin_deactivates_user_and_that_user_is_locked_out(
-    client, db_session, admin_headers, requester_user, requester_headers, default_password
+    client,
+    db_session,
+    admin_headers,
+    requester_user,
+    requester_headers,
+    default_password,
 ):
     response = client.patch(
-        f"/users/{requester_user.id}/status", json={"is_active": False}, headers=admin_headers
+        f"/users/{requester_user.id}/status",
+        json={"is_active": False},
+        headers=admin_headers,
     )
 
     assert response.status_code == 200
@@ -178,7 +206,9 @@ def test_admin_can_reactivate_a_user(
 
 def test_admin_cannot_change_their_own_status(client, admin_user, admin_headers):
     response = client.patch(
-        f"/users/{admin_user.id}/status", json={"is_active": False}, headers=admin_headers
+        f"/users/{admin_user.id}/status",
+        json={"is_active": False},
+        headers=admin_headers,
     )
 
     assert response.status_code == 400
@@ -187,7 +217,9 @@ def test_admin_cannot_change_their_own_status(client, admin_user, admin_headers)
 
 def test_setting_the_same_status_returns_409(client, admin_headers, requester_user):
     response = client.patch(
-        f"/users/{requester_user.id}/status", json={"is_active": True}, headers=admin_headers
+        f"/users/{requester_user.id}/status",
+        json={"is_active": True},
+        headers=admin_headers,
     )
 
     assert response.status_code == 409
@@ -206,7 +238,12 @@ def test_status_update_requires_admin_and_a_body(
 ):
     url = f"/users/{agent_user.id}/status"
 
-    assert client.patch(url, json={"is_active": False}, headers=requester_headers).status_code == 403
+    assert (
+        client.patch(
+            url, json={"is_active": False}, headers=requester_headers
+        ).status_code
+        == 403
+    )
     assert client.patch(url, json={}, headers=admin_headers).status_code == 422
 
 
@@ -236,7 +273,10 @@ def test_change_password_with_wrong_current_password_returns_400(
 ):
     response = client.patch(
         "/users/me/password",
-        json={"current_password": "NotMyPassword1!", "new_password": "BrandNewPass456!"},
+        json={
+            "current_password": "NotMyPassword1!",
+            "new_password": "BrandNewPass456!",
+        },
         headers=requester_headers,
     )
 
@@ -254,7 +294,10 @@ def test_new_password_must_differ_from_current_password(
     )
 
     assert response.status_code == 400
-    assert response.json()["detail"] == "New password must be different from current password"
+    assert (
+        response.json()["detail"]
+        == "New password must be different from current password"
+    )
 
 
 def test_new_password_must_be_at_least_8_characters(

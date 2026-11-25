@@ -20,9 +20,8 @@ TWO RULES TO REMEMBER WHEN WRITING TESTS
 """
 
 import itertools
-import uuid
-from datetime import datetime, timedelta, timezone
 import os
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -34,6 +33,7 @@ import models  # noqa: F401  (importing the package registers every model on Bas
 from core.config import settings
 from core.security import create_access_token, get_password_hash
 from database.dependencies import get_db
+from database.redis import redis_client
 from main import app
 from models.base import Base
 from models.category import Category
@@ -46,6 +46,7 @@ from models.user_role import UserRole
 from models.user_session import UserSession
 
 TEST_DB_NAME = os.getenv("TEST_DB_NAME", "test")
+
 DEFAULT_PASSWORD = "StrongPass123!"
 
 _counter = itertools.count(1)  # used to generate unique emails / names
@@ -150,10 +151,12 @@ def notifications(monkeypatch):
     monkeypatch.setattr("routes.tickets.send_notification", recorder)
     return recorder
 
+
 @pytest.fixture(autouse=True)
 def disable_rate_limit_for_tests(monkeypatch):
     """Disable login rate limiting during ordinary tests."""
     monkeypatch.setattr("routes.auth.check_rate_limit", lambda **kwargs: None)
+
 
 # --------------------------------------------------------------------------- #
 # Data factories (call them inside tests to build exactly the data you need)
@@ -290,7 +293,7 @@ def auth_headers(db_session):
     def _headers(user):
         new_session = UserSession(
             user_id=user.id,
-            expires_at=datetime.now(timezone.utc) + timedelta(days=1),
+            expires_at=datetime.now(UTC) + timedelta(days=1),
         )
         db_session.add(new_session)
         db_session.flush()
@@ -350,3 +353,21 @@ def agent_headers(auth_headers, agent_user):
 @pytest.fixture()
 def requester_headers(auth_headers, requester_user):
     return auth_headers(requester_user)
+
+
+@pytest.fixture(autouse=True)
+def isolate_redis():
+    redis_db = redis_client.connection_pool.connection_kwargs["db"]
+
+    if settings.REDIS_DB != 15 or redis_db != 15:
+        pytest.exit(
+            "Unsafe Redis configuration. Tests must use Redis DB 15.",
+            returncode=2,
+        )
+
+    redis_client.flushdb()
+
+    try:
+        yield
+    finally:
+        redis_client.flushdb()

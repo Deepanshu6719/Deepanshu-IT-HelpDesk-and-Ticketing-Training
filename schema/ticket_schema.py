@@ -1,12 +1,14 @@
-from pydantic import BaseModel, Field, field_validator, ConfigDict,model_validator
-from typing import Literal
 from datetime import datetime
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class CategoryResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     name: str
+
 
 class CategoryCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -24,6 +26,7 @@ class CategoryCreate(BaseModel):
             raise ValueError("Category name cannot be empty")
 
         return value
+
 
 class CategoryPatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -101,6 +104,7 @@ class TicketResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+
 class TicketPatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -108,13 +112,11 @@ class TicketPatch(BaseModel):
     description: str | None = Field(default=None, min_length=10, max_length=150)
     category: str | None = None
 
-    requested_priority: Literal[
-        "low", "medium", "high", "urgent"
-    ] | None = None
+    requested_priority: Literal["low", "medium", "high", "urgent"] | None = None
 
-    status: Literal[
-        "open", "under_review", "in_progress", "resolved", "closed"
-    ] | None = None
+    status: (
+        Literal["open", "under_review", "in_progress", "resolved", "closed"] | None
+    ) = None
 
     priority: Literal["low", "medium", "high", "urgent"] | None = None
     assigned_to: int | None = None
@@ -136,6 +138,7 @@ class TicketPatch(BaseModel):
             if len(value) < 10:
                 raise ValueError("Description must contain at least 10 characters")
         return value
+
 
 class TicketListResponse(BaseModel):
     items: list[TicketResponse]

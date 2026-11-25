@@ -1,16 +1,17 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
-from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
+from core.dependencies import require_admin
 from database.dependencies import get_db
 from models.department import Department
 from models.user import User
 from schema.department_schema import (
-    DepartmentResponse,
     DepartmentCreate,
     DepartmentPatch,
+    DepartmentResponse,
 )
-from core.dependencies import get_current_user, require_admin
 
 router = APIRouter(tags=["Department"])
 
@@ -25,9 +26,7 @@ def get_departments(
 ):
     statement = select(Department).order_by(Department.id)
 
-    departments = db.scalars(statement).all()
-
-    return departments
+    return db.scalars(statement).all()
 
 
 @router.get(
@@ -70,14 +69,15 @@ def create_department(
         db.commit()
         db.refresh(department)
 
-    except IntegrityError:
+    except IntegrityError as exc:
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Department already exists",
-        )
+        ) from exc
 
     return department
+
 
 @router.patch(
     "/departments/{department_id}",
@@ -97,13 +97,11 @@ def update_department(
 
     if department_data.name is None:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Department name cannot be null",
         )
 
-    statement = select(Department).where(
-        Department.id == department_id
-    )
+    statement = select(Department).where(Department.id == department_id)
     department = db.scalar(statement)
 
     if department is None:
@@ -118,11 +116,11 @@ def update_department(
         db.commit()
         db.refresh(department)
 
-    except IntegrityError:
+    except IntegrityError as exc:
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Department name already exists",
-        )
+        ) from exc
 
     return department

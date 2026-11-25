@@ -1,22 +1,24 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Literal
-from sqlalchemy import select, or_, func
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
-from fastapi import APIRouter, HTTPException, Depends, status, Query
-from schema.ticket_schema import (
-    TicketCreate,
-    TicketResponse,
-    TicketPatch,
-    TicketListResponse,
-)
-from database.dependencies import get_db
-from models.user import User
-from models.category import Category
-from models.ticket import Ticket
+
 from core.dependencies import get_current_user
 from core.permissions import has_role
+from database.dependencies import get_db
+from models.category import Category
 from models.role import Role
+from models.ticket import Ticket
+from models.user import User
 from models.user_role import UserRole
+from schema.ticket_schema import (
+    TicketCreate,
+    TicketListResponse,
+    TicketPatch,
+    TicketResponse,
+)
 from tasks.notification import send_notification
 
 router = APIRouter(tags=["Tickets"])
@@ -89,7 +91,7 @@ def get_tickets(
 
         if not search_term:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="Search cannot contain only whitespace",
             )
 
@@ -136,7 +138,7 @@ def create_ticket(
 
     if category is None or not category.is_active:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Invalid or inactive category",
         )
 
@@ -175,8 +177,7 @@ def create_ticket(
         send_notification.delay(
             admin_email,
             "New ticket created",
-            f"A new ticket #{new_ticket.id} has been created "
-            f"by {current_user.email}.",
+            f"A new ticket #{new_ticket.id} has been created by {current_user.email}.",
         )
 
     # Notify the requester
@@ -306,7 +307,7 @@ def update_ticket(
 
     if not update_data:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="No fields provided for update",
         )
 
@@ -314,7 +315,7 @@ def update_ticket(
     for key, value in update_data.items():
         if value is None and key != "assigned_to":
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=f"{key} cannot be null",
             )
 
@@ -337,7 +338,7 @@ def update_ticket(
 
         if category is None:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="Invalid category",
             )
 
@@ -352,26 +353,26 @@ def update_ticket(
 
         if agent is None:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="Agent not found",
             )
 
         if agent.id == ticket.requester_id:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="Requester cannot be assigned as their own agent",
             )
 
         if not has_role(agent, "agent"):
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="Selected user is not an agent",
             )
 
         # Do not assign tickets to inactive agents
         if not agent.is_active:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="Cannot assign a ticket to an inactive agent",
             )
 
@@ -382,7 +383,7 @@ def update_ticket(
 
         if agent.department_id != target_department_id:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="Agent does not belong to the ticket department",
             )
     # Apply updates
@@ -442,10 +443,7 @@ def delete_ticket(
         raise HTTPException(status_code=404, detail="Ticket not found")
     is_admin = has_role(current_user, "admin")
 
-    if is_admin:
-        pass
-
-    elif (
+    if is_admin or (
         ticket.requester_id == current_user.id
         and ticket.status == "open"
         and ticket.assigned_to is None
@@ -457,13 +455,11 @@ def delete_ticket(
 
     ticket.is_deleted = True
 
-    ticket.updated_at = datetime.now(timezone.utc)
-    ticket.deleted_at = datetime.now(timezone.utc)
+    ticket.updated_at = datetime.now(UTC)
+    ticket.deleted_at = datetime.now(UTC)
 
     try:
         db.commit()
     except Exception:
         db.rollback()
         raise
-
-    return None

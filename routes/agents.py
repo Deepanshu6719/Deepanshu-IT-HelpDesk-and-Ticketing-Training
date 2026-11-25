@@ -1,14 +1,15 @@
-from fastapi import APIRouter, Depends,HTTPException,status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from core.dependencies import require_admin
 from database.dependencies import get_db
+from models.department import Department
+from models.role import Role
 from models.user import User
 from models.user_role import UserRole
-from models.role import Role
 from schema.user_schema import UserResponse
-from core.dependencies import require_admin
-from models.department import Department
+
 router = APIRouter(tags=["Agents"])
 
 
@@ -29,9 +30,8 @@ def get_agents(
         .order_by(User.id)
     )
 
-    agents = db.scalars(statement).all()
+    return db.scalars(statement).all()
 
-    return agents
 
 @router.get(
     "/departments/{department_id}/agents",
@@ -63,6 +63,4 @@ def get_department_agents(
         .order_by(User.id)
     )
 
-    agents = db.scalars(statement).all()
-
-    return agents
+    return db.scalars(statement).all()

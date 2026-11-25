@@ -1,15 +1,15 @@
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, ForeignKey, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from models.base import Base
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from models.user import User
     from models.refresh_token import RefreshToken
+    from models.user import User
 
 
 class UserSession(Base):

@@ -1,14 +1,14 @@
-
-from fastapi import APIRouter, HTTPException, Depends
-from schema.user_schema import UserRoleAssign
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
-from sqlalchemy.orm import Session
-from database.dependencies import get_db
-from models.user import User
-from models.role import Role
-from models.user_role import UserRole
-from core.dependencies import require_admin
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
+from core.dependencies import require_admin
+from database.dependencies import get_db
+from models.role import Role
+from models.user import User
+from models.user_role import UserRole
+from schema.user_schema import UserRoleAssign
 
 router = APIRouter(tags=["Assign role"])
 
@@ -56,9 +56,7 @@ def assign_user_role(
             UserRole.role_id == agent_role.id,
         )
 
-        existing_agent_assignment = db.scalar(
-            agent_assignment_statement
-        )
+        existing_agent_assignment = db.scalar(agent_assignment_statement)
 
         if existing_agent_assignment is None:
             raise HTTPException(
@@ -78,11 +76,11 @@ def assign_user_role(
         db.commit()
         db.refresh(user_role)
 
-    except IntegrityError:
+    except IntegrityError as exc:
         db.rollback()
         raise HTTPException(
             status_code=409,
             detail="User already has this role",
-        )
+        ) from exc
 
     return user_role

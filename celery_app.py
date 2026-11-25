@@ -1,8 +1,10 @@
 from celery import Celery
 
+from core.config import settings
+
 celery_app = Celery(
     "helpdesk",
-    broker="redis://localhost:6379/1",
+    broker=settings.CELERY_BROKER_URL,
     include=["tasks.notification"],
 )
 

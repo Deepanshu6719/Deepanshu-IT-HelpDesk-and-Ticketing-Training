@@ -12,3 +12,7 @@ Helpdesk Local.session.sql
 
 *.py[cod]
 .pytest_cache/
+
+.ruff_cache/
+scratch.py
+*.dump

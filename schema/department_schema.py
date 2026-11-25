@@ -1,5 +1,6 @@
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict,Field,field_validator
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class DepartmentResponse(BaseModel):
@@ -8,6 +9,7 @@ class DepartmentResponse(BaseModel):
     id: int
     name: str
     created_at: datetime
+
 
 class DepartmentCreate(BaseModel):
     name: str = Field(min_length=2, max_length=100)
@@ -22,6 +24,7 @@ class DepartmentCreate(BaseModel):
             raise ValueError("Department name cannot be empty")
 
         return value
+
 
 class DepartmentPatch(BaseModel):
     name: str | None = Field(

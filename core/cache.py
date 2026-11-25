@@ -1,10 +1,12 @@
 import json
 import logging
+
 from redis.exceptions import RedisError
 
 from database.redis import redis_client
 
 logger = logging.getLogger(__name__)
+
 
 def invalidate_cache(pattern: str) -> None:
     try:
@@ -26,6 +28,7 @@ def invalidate_cache(pattern: str) -> None:
     except RedisError:
         logger.exception("Redis cache invalidation failed")
 
+
 def get_cache(key: str):
     try:
         cached_data = redis_client.get(key)
@@ -37,6 +40,7 @@ def get_cache(key: str):
     except (RedisError, json.JSONDecodeError):
         logger.exception("Redis cache read failed")
         return None
+
 
 def set_cache(key: str, data, ttl: int = 300) -> None:
     try:

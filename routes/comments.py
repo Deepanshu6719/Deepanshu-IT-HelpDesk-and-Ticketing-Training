@@ -2,15 +2,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from database.dependencies import get_db
 from core.dependencies import get_current_user
-from core.ticket_permissions import check_ticket_access
 from core.permissions import has_role
-
-from models.user import User
+from core.ticket_permissions import check_ticket_access
+from database.dependencies import get_db
 from models.ticket import Ticket
 from models.ticket_comment import TicketComment
-
+from models.user import User
 from schema.comment_schema import CommentCreate, CommentResponse
 
 router = APIRouter(tags=["Comments"])
@@ -105,6 +103,4 @@ def get_comments(
         TicketComment.id.asc(),
     )
 
-    comments = db.scalars(statement).all()
-
-    return comments
+    return db.scalars(statement).all()

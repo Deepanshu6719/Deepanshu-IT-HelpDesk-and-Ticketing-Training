@@ -1,8 +1,10 @@
 from logging.config import fileConfig
-from database.connection import engine
+
+import models  # noqa: F401 - Register SQLAlchemy models
 from alembic import context
+from database.connection import engine
 from models.base import Base
-import models
+
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config

@@ -13,9 +13,9 @@ end
 return count
 """
 
-rate_limit_script = redis_client.register_script(
-    RATE_LIMIT_SCRIPT
-)
+rate_limit_script = redis_client.register_script(RATE_LIMIT_SCRIPT)
+
+
 def check_rate_limit(
     key: str,
     limit: int,
@@ -33,8 +33,8 @@ def check_rate_limit(
                 detail="Too many requests. Please try again later.",
             )
 
-    except RedisError:
+    except RedisError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Rate limiting service is unavailable.",
-        )
+        ) from exc

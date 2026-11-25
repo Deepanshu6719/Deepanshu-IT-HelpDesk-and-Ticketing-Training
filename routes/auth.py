@@ -1,25 +1,26 @@
-from datetime import datetime, timedelta, timezone
-from core.rate_limit import check_rate_limit
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from datetime import UTC, datetime, timedelta
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from database.dependencies import get_db
-from models.user import User
-from models.user_session import UserSession
-from models.refresh_token import RefreshToken
-from schema.auth_schema import RefreshTokenRequest
-from core.security import (
-    verify_password,
-    create_access_token,
-    create_refresh_token,
-    hash_refresh_token,
-    decode_access_token,
-)
 from core.config import settings
 from core.dependencies import get_current_user, oauth2_scheme
+from core.rate_limit import check_rate_limit
+from core.security import (
+    create_access_token,
+    create_refresh_token,
+    decode_access_token,
+    hash_refresh_token,
+    verify_password,
+)
+from database.dependencies import get_db
+from models.refresh_token import RefreshToken
+from models.user import User
+from models.user_session import UserSession
+from schema.auth_schema import RefreshTokenRequest
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -56,7 +57,7 @@ def login(
         )
 
     # 3. Calculate session and refresh-token expiration
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     session_expiry = now + timedelta(days=settings.SESSION_EXPIRE_DAYS)
 
@@ -146,7 +147,7 @@ def refresh_access_token(
         user_session = db.scalar(session_statement)
 
         # Get current time after acquiring the session lock
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         if (
             user_session is None
@@ -179,7 +180,6 @@ def refresh_access_token(
 
         # 5. Detect reuse of an already-revoked refresh token
         if old_token.revoked_at is not None:
-
             # Revoke the entire device session
             user_session.revoked_at = now
 
@@ -269,7 +269,7 @@ def logout(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     try:
         # 1. Extract the session ID from the validated access token
