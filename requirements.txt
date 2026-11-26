@@ -15,3 +15,5 @@ redis==8.2.0
 celery==5.7.0
 gunicorn==27.0.1
 uvicorn-worker==0.4.0
+structlog==26.1.0
+prometheus-client==0.26.0

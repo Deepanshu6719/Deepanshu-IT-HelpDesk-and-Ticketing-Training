@@ -1,16 +1,20 @@
 from getpass import getpass
 
+import structlog
 from email_validator import EmailNotValidError, validate_email
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 import models  # noqa: F401 - Register SQLAlchemy models
+from core.logging import configure_logging
 from core.security import get_password_hash
 from database.connection import SessionLocal
 from models.department import Department
 from models.role import Role
 from models.user import User
 from models.user_role import UserRole
+
+logger = structlog.get_logger(__name__)
 
 
 def initialize_roles(db: Session) -> None:
@@ -19,9 +23,9 @@ def initialize_roles(db: Session) -> None:
 
         if role is None:
             db.add(Role(name=role_name))
-            print(f"Created role: {role_name}")
+            logger.info("role_created", role=role_name)
         else:
-            print(f"Role already exists: {role_name}")
+            logger.debug("role_already_exists", role=role_name)
 
 
 def initialize_department(db: Session) -> Department:
@@ -32,9 +36,9 @@ def initialize_department(db: Session) -> Department:
         db.add(department)
         db.flush()
 
-        print("Created department: IT")
+        logger.info("department_created", department="IT")
     else:
-        print("Department already exists: IT")
+        logger.debug("department_already_exists", department="IT")
 
     return department
 
@@ -58,7 +62,7 @@ def initialize_admin(
     existing_user = db.scalar(select(User).where(User.email == email))
 
     if existing_user is not None:
-        print("User already exists. Skipping admin creation.")
+        logger.info("admin_creation_skipped", reason="user_exists")
         return None
 
     password = getpass("Enter admin password: ")
@@ -80,7 +84,7 @@ def initialize_admin(
     db.add(admin)
     db.flush()
 
-    print(f"Created administrator account: {email}")
+    logger.info("administrator_created")
 
     return admin
 
@@ -99,7 +103,7 @@ def assign_admin_roles(db: Session, admin: User) -> None:
             )
         )
 
-        print(f"Assigned role: {role_name}")
+        logger.info("role_assigned", role=role_name)
 
 
 def initialize_database() -> None:
@@ -118,12 +122,14 @@ def initialize_database() -> None:
 
             db.commit()
 
-            print("Database initialization completed.")
+            logger.info("database_initialization_completed")
 
         except Exception:
             db.rollback()
+            logger.error("database_initialization_failed")
             raise
 
 
 if __name__ == "__main__":
+    configure_logging()
     initialize_database()
