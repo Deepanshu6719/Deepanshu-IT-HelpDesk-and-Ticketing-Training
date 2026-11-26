@@ -1,16 +1,17 @@
 import json
-import logging
 
+import structlog
 from redis.exceptions import RedisError
 
 from database.redis import redis_client
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 def invalidate_cache(pattern: str) -> None:
     try:
         cursor = 0
+        deleted_count = 0
 
         while True:
             cursor, keys = redis_client.scan(
@@ -20,13 +21,21 @@ def invalidate_cache(pattern: str) -> None:
             )
 
             if keys:
-                redis_client.delete(*keys)
+                deleted_count += redis_client.delete(*keys)
 
             if cursor == 0:
                 break
 
-    except RedisError:
-        logger.exception("Redis cache invalidation failed")
+        logger.debug(
+            "cache_invalidated",
+            deleted_count=deleted_count,
+        )
+
+    except RedisError as exc:
+        logger.warning(
+            "cache_invalidation_failed",
+            error_type=type(exc).__name__,
+        )
 
 
 def get_cache(key: str):
@@ -34,11 +43,21 @@ def get_cache(key: str):
         cached_data = redis_client.get(key)
 
         if cached_data is None:
+            logger.debug("cache_miss")
             return None
-        return json.loads(cached_data)
 
-    except (RedisError, json.JSONDecodeError):
-        logger.exception("Redis cache read failed")
+        data = json.loads(cached_data)
+
+        logger.debug("cache_hit")
+
+        return data
+
+    except (RedisError, json.JSONDecodeError) as exc:
+        logger.warning(
+            "cache_read_failed",
+            error_type=type(exc).__name__,
+        )
+
         return None
 
 
@@ -52,5 +71,13 @@ def set_cache(key: str, data, ttl: int = 300) -> None:
             serialized_data,
         )
 
-    except RedisError:
-        logger.exception("Redis cache write failed")
+        logger.debug(
+            "cache_set",
+            ttl_seconds=ttl,
+        )
+
+    except RedisError as exc:
+        logger.warning(
+            "cache_write_failed",
+            error_type=type(exc).__name__,
+        )

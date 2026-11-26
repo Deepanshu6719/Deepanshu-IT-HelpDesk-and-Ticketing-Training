@@ -12,7 +12,14 @@ DATABASE_URL = URL.create(
     database=settings.DB_NAME,
 )  # the db url and also the db driver is present here
 
-engine = create_engine(DATABASE_URL)  # creating the engine and its object in "engine"
+engine = create_engine(
+    DATABASE_URL,
+    pool_pre_ping=True,
+    pool_timeout=3,
+    connect_args={
+        "connect_timeout": 3,
+    },
+)  # creating the engine and its object in "engine"
 
 SessionLocal = sessionmaker(
     bind=engine, autoflush=False, autocommit=False

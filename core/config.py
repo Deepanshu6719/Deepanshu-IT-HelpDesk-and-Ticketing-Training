@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     # Celery configuration
     CELERY_BROKER_URL: str = "redis://localhost:6379/1"
 
+    LOG_LEVEL: str = "INFO"
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
