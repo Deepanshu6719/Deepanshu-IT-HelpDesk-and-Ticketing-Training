@@ -3,35 +3,72 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from api.docs.resources import (
+    DEPARTMENT_CREATE_RESPONSES,
+    DEPARTMENT_DETAIL_RESPONSES,
+    DEPARTMENT_LIST_RESPONSES,
+    DEPARTMENT_UPDATE_RESPONSES,
+    request_example,
+)
 from core.dependencies import require_admin
+from core.pagination import Pagination
+from core.pagination_utils import paginate_query
 from database.dependencies import get_db
 from models.department import Department
 from models.user import User
+from schema.common_schema import PaginatedResponse, SuccessResponse
 from schema.department_schema import (
     DepartmentCreate,
     DepartmentPatch,
     DepartmentResponse,
 )
 
-router = APIRouter(tags=["Department"])
+router = APIRouter(tags=["Departments"])
 
 
 @router.get(
     "/departments",
-    response_model=list[DepartmentResponse],
+    response_model=SuccessResponse[PaginatedResponse[DepartmentResponse]],
+    summary="List departments",
+    description=(
+        "Retrieve organizational departments ordered by department ID. "
+        "Requires administrator privileges."
+    ),
+    responses=DEPARTMENT_LIST_RESPONSES,
 )
 def get_departments(
+    pagination: Pagination = Depends(Pagination),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
     statement = select(Department).order_by(Department.id)
 
-    return db.scalars(statement).all()
+    items, total = paginate_query(
+        db=db,
+        statement=statement,
+        pagination=pagination,
+    )
+
+    return SuccessResponse[PaginatedResponse[DepartmentResponse]](
+        data=PaginatedResponse[DepartmentResponse](
+            total=total,
+            page=pagination.page,
+            limit=pagination.limit,
+            items=items,
+        )
+    )
 
 
 @router.get(
     "/departments/{department_id}",
-    response_model=DepartmentResponse,
+    response_model=SuccessResponse[DepartmentResponse],
+    summary="Retrieve department details",
+    description=(
+        "Retrieve an existing organizational department by its ID. "
+        "Returns HTTP 404 if the department does not exist. "
+        "Requires administrator privileges."
+    ),
+    responses=DEPARTMENT_DETAIL_RESPONSES,
 )
 def get_department(
     department_id: int,
@@ -48,13 +85,25 @@ def get_department(
             detail="Department not found",
         )
 
-    return department
+    return SuccessResponse(data=department)
 
 
 @router.post(
     "/departments",
-    response_model=DepartmentResponse,
+    response_model=SuccessResponse[DepartmentResponse],
     status_code=status.HTTP_201_CREATED,
+    summary="Create a department",
+    description=(
+        "Create a new organizational department with a unique name. "
+        "Departments are used to organize users, agents and support categories. "
+        "Requires administrator privileges."
+    ),
+    responses=DEPARTMENT_CREATE_RESPONSES,
+    openapi_extra=request_example(
+        {
+            "name": "Network Support",
+        }
+    ),
 )
 def create_department(
     department_data: DepartmentCreate,
@@ -76,12 +125,24 @@ def create_department(
             detail="Department already exists",
         ) from exc
 
-    return department
+    return SuccessResponse(data=department)
 
 
 @router.patch(
     "/departments/{department_id}",
-    response_model=DepartmentResponse,
+    response_model=SuccessResponse[DepartmentResponse],
+    summary="Rename a department",
+    description=(
+        "Rename an existing department without changing its ID. "
+        "The new name must be unique and cannot be null. "
+        "Requires administrator privileges."
+    ),
+    responses=DEPARTMENT_UPDATE_RESPONSES,
+    openapi_extra=request_example(
+        {
+            "name": "Network Operations",
+        }
+    ),
 )
 def update_department(
     department_id: int,
@@ -123,4 +184,4 @@ def update_department(
             detail="Department name already exists",
         ) from exc
 
-    return department
+    return SuccessResponse(data=department)

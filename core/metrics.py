@@ -27,18 +27,31 @@ HTTP_REQUEST_DURATION = Histogram(
 )
 
 
+def get_route_template(request: Request) -> str:
+    fastapi_scope = request.scope.get("fastapi", {})
+
+    effective_route = fastapi_scope.get("effective_route_context")
+
+    effective_path = getattr(
+        effective_route,
+        "path",
+        None,
+    )
+
+    if effective_path:
+        return effective_path
+
+    route = request.scope.get("route")
+
+    return getattr(route, "path", "unmatched")
+
+
 def record_request_metrics(
     request: Request,
     status_code: int,
     duration_seconds: float,
 ) -> None:
-    route = request.scope.get("route")
-
-    route_path = getattr(
-        route,
-        "path",
-        "unmatched",
-    )
+    route_path = get_route_template(request)
 
     if route_path == "/metrics":
         return

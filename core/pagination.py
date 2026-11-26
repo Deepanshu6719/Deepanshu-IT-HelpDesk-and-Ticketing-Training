@@ -1,12 +1,24 @@
 from fastapi import Query
 
 
-# Groups related pagination parameters into one reusable object.
 class Pagination:
     def __init__(
         self,
-        skip: int = Query(default=0, ge=0),
-        limit: int = Query(default=10, ge=1, le=100),
+        page: int = Query(
+            default=1,
+            ge=1,
+            description="Page number, starting from 1.",
+        ),
+        limit: int = Query(
+            default=10,
+            ge=1,
+            le=100,
+            description="Maximum number of records per page.",
+        ),
     ):
-        self.skip = skip
+        self.page = page
         self.limit = limit
+
+    @property
+    def offset(self) -> int:
+        return (self.page - 1) * self.limit

@@ -37,3 +37,14 @@ class UserStatusUpdate(BaseModel):
 class PasswordChange(BaseModel):
     current_password: str = Field(min_length=1)
     new_password: str = Field(min_length=8, max_length=128)
+
+
+class PasswordChangeResponse(BaseModel):
+    message: str
+
+
+class UserRoleResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    user_id: int
+    role_id: int

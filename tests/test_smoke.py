@@ -12,12 +12,12 @@ def test_app_responds_and_lists_routes(client):
 
     assert response.status_code == 200
     paths = response.json()["paths"]
-    assert "/tickets" in paths
-    assert "/auth/login" in paths
+    assert "/api/v1/tickets" in paths
+    assert "/api/v1/auth/login" in paths
 
 
 def test_protected_endpoint_rejects_anonymous_requests(client):
-    response = client.get("/tickets")
+    response = client.get("/api/v1/tickets")
 
     assert response.status_code == 401
 

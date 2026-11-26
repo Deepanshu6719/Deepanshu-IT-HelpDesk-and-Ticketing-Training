@@ -3,16 +3,27 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from api.docs.resources import (
+    PASSWORD_CHANGE_RESPONSES,
+    USER_CREATE_RESPONSES,
+    USER_DETAIL_RESPONSES,
+    USER_LIST_RESPONSES,
+    USER_STATUS_RESPONSES,
+    request_example,
+)
 from core.dependencies import get_current_user, require_admin
 from core.pagination import Pagination
+from core.pagination_utils import paginate_query
 from core.security import get_password_hash, verify_password
 from database.dependencies import get_db
 from models.department import Department
 from models.role import Role
 from models.user import User
 from models.user_role import UserRole
+from schema.common_schema import PaginatedResponse, SuccessResponse
 from schema.user_schema import (
     PasswordChange,
+    PasswordChangeResponse,
     UserCreate,
     UserResponse,
     UserStatusUpdate,
@@ -23,8 +34,24 @@ router = APIRouter(tags=["Users"])
 
 @router.post(
     "/users",
-    response_model=UserResponse,
+    response_model=SuccessResponse[UserResponse],
     status_code=status.HTTP_201_CREATED,
+    summary="Create a user account",
+    description=(
+        "Create a requester, agent or administrator account. "
+        "The email address must be unique and the department must exist. "
+        "Passwords are securely hashed before storage. "
+        "Requires administrator privileges."
+    ),
+    responses=USER_CREATE_RESPONSES,
+    openapi_extra=request_example(
+        {
+            "email": "employee@example.com",
+            "password": "ExamplePassword123!",
+            "department_id": 2,
+            "role": "requester",
+        }
+    ),
 )
 def create_user(
     user_data: UserCreate,
@@ -93,23 +120,55 @@ def create_user(
             detail="Could not create user. Email may already be registered.",
         ) from exc
 
-    return new_user
+    return SuccessResponse(data=new_user)
 
 
-@router.get("/users", response_model=list[UserResponse])
+@router.get(
+    "/users",
+    response_model=SuccessResponse[PaginatedResponse[UserResponse]],
+    summary="List user accounts",
+    description=(
+        "Retrieve user accounts using pagination. "
+        "Includes both active and inactive users. "
+        "Results are ordered by user ID. "
+        "Requires administrator privileges."
+    ),
+    responses=USER_LIST_RESPONSES,
+)
 def get_all_users(
     pagination: Pagination = Depends(Pagination),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
-    statement = (
-        select(User).order_by(User.id).offset(pagination.skip).limit(pagination.limit)
+    statement = select(User).order_by(User.id)
+
+    items, total = paginate_query(
+        db=db,
+        statement=statement,
+        pagination=pagination,
     )
 
-    return db.scalars(statement).all()
+    return SuccessResponse[PaginatedResponse[UserResponse]](
+        data=PaginatedResponse[UserResponse](
+            total=total,
+            page=pagination.page,
+            limit=pagination.limit,
+            items=items,
+        )
+    )
 
 
-@router.get("/users/{user_id}", response_model=UserResponse)
+@router.get(
+    "/users/{user_id}",
+    response_model=SuccessResponse[UserResponse],
+    summary="Retrieve user account details",
+    description=(
+        "Retrieve an existing user's account details by user ID. "
+        "Password hashes and authentication secrets are not returned. "
+        "Requires administrator privileges."
+    ),
+    responses=USER_DETAIL_RESPONSES,
+)
 def get_user_by_id(
     user_id: int,
     db: Session = Depends(get_db),
@@ -123,10 +182,27 @@ def get_user_by_id(
             detail="User not found",
         )
 
-    return user
+    return SuccessResponse(data=user)
 
 
-@router.patch("/users/{user_id}/status", response_model=UserResponse)
+@router.patch(
+    "/users/{user_id}/status",
+    response_model=SuccessResponse[UserResponse],
+    summary="Activate or deactivate a user",
+    description=(
+        "Change the active status of an existing user account. "
+        "Administrators cannot change their own account status. "
+        "Requesting the account's existing status returns HTTP 409. "
+        "Inactive users cannot authenticate successfully. "
+        "Requires administrator privileges."
+    ),
+    responses=USER_STATUS_RESPONSES,
+    openapi_extra=request_example(
+        {
+            "is_active": False,
+        }
+    ),
+)
 def update_user_status(
     user_id: int,
     status_data: UserStatusUpdate,
@@ -162,10 +238,28 @@ def update_user_status(
         db.rollback()
         raise
 
-    return user
+    return SuccessResponse(data=user)
 
 
-@router.patch("/users/me/password")
+@router.patch(
+    "/users/me/password",
+    response_model=SuccessResponse[PasswordChangeResponse],
+    summary="Change the current user's password",
+    description=(
+        "Change the authenticated user's password after verifying "
+        "their current password. "
+        "The new password must differ from the existing password. "
+        "Previously issued access tokens are invalidated by "
+        "incrementing the user's token version."
+    ),
+    responses=PASSWORD_CHANGE_RESPONSES,
+    openapi_extra=request_example(
+        {
+            "current_password": "ExampleOldPassword123!",
+            "new_password": "ExampleNewPassword456!",
+        }
+    ),
+)
 def change_password(
     password_data: PasswordChange,
     db: Session = Depends(get_db),
@@ -203,4 +297,8 @@ def change_password(
         db.rollback()
         raise
 
-    return {"message": "Password changed successfully"}
+    return SuccessResponse(
+        data={
+            "message": "Password changed successfully",
+        }
+    )
