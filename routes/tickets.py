@@ -2,10 +2,21 @@ from datetime import UTC, datetime
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
 
+from api.docs.tickets import (
+    TICKET_CREATE_EXAMPLES,
+    TICKET_CREATE_RESPONSES,
+    TICKET_DELETE_RESPONSES,
+    TICKET_DETAIL_RESPONSES,
+    TICKET_LIST_RESPONSES,
+    TICKET_UPDATE_EXAMPLES,
+    TICKET_UPDATE_RESPONSES,
+)
 from core.dependencies import get_current_user
+from core.pagination import Pagination
+from core.pagination_utils import paginate_query
 from core.permissions import has_role
 from database.dependencies import get_db
 from models.category import Category
@@ -13,9 +24,9 @@ from models.role import Role
 from models.ticket import Ticket
 from models.user import User
 from models.user_role import UserRole
+from schema.common_schema import PaginatedResponse, SuccessResponse
 from schema.ticket_schema import (
     TicketCreate,
-    TicketListResponse,
     TicketPatch,
     TicketResponse,
 )
@@ -24,7 +35,19 @@ from tasks.notification import send_notification
 router = APIRouter(tags=["Tickets"])
 
 
-@router.get("/tickets", response_model=TicketListResponse)
+@router.get(
+    "/tickets",
+    response_model=SuccessResponse[PaginatedResponse[TicketResponse]],
+    summary="List accessible tickets",
+    description=(
+        "Retrieve a paginated list of support tickets. "
+        "Admins can access all non-deleted tickets. "
+        "Agents can access tickets assigned to them or created by them. "
+        "Requesters can access only their own tickets. "
+        "Supports filtering, searching and pagination."
+    ),
+    responses=TICKET_LIST_RESPONSES,
+)
 def get_tickets(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -45,8 +68,7 @@ def get_tickets(
     department_id: int | None = Query(default=None, gt=0),
     assigned_to: int | None = Query(default=None, gt=0),
     search: str | None = Query(default=None, min_length=1, max_length=100),
-    page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=10, ge=1, le=100),
+    pagination: Pagination = Depends(Pagination),
 ):
     statement = (
         select(Ticket)
@@ -103,29 +125,46 @@ def get_tickets(
                 Ticket.description.ilike(search_term),
             )
         )
-    total = db.scalar(
-        select(func.count()).select_from(statement.order_by(None).subquery())
-    )
-
-    offset = (page - 1) * page_size
 
     statement = statement.order_by(Ticket.created_at.desc(), Ticket.id.desc())
-    statement = statement.offset(offset).limit(page_size)
 
-    tickets = db.scalars(statement).all()
-    total_pages = (total + page_size - 1) // page_size
-
-    return {
-        "items": tickets,
-        "total": total,
-        "page": page,
-        "page_size": page_size,
-        "total_pages": total_pages,
-    }
+    items, total = paginate_query(
+        db=db,
+        statement=statement,
+        pagination=pagination,
+    )
+    return SuccessResponse[PaginatedResponse[TicketResponse]](
+        data=PaginatedResponse[TicketResponse](
+            total=total,
+            page=pagination.page,
+            limit=pagination.limit,
+            items=items,
+        )
+    )
 
 
 @router.post(
-    "/tickets", response_model=TicketResponse, status_code=status.HTTP_201_CREATED
+    "/tickets",
+    response_model=SuccessResponse[TicketResponse],
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a support ticket",
+    description=(
+        "Create a new support ticket for the authenticated user. "
+        "The category must exist and be active. "
+        "The ticket department is determined by its category. "
+        "New tickets are open and unassigned. "
+        "Notification tasks are published for the requester and active admins."
+    ),
+    responses=TICKET_CREATE_RESPONSES,
+    openapi_extra={
+        "requestBody": {
+            "content": {
+                "application/json": {
+                    "examples": TICKET_CREATE_EXAMPLES,
+                },
+            },
+        },
+    },
 )
 def create_ticket(
     ticket: TicketCreate,
@@ -186,10 +225,23 @@ def create_ticket(
         "Ticket created successfully",
         f"Your ticket #{new_ticket.id} has been created successfully.",
     )
-    return new_ticket
+    return SuccessResponse[TicketResponse](
+        data=new_ticket,
+    )
 
 
-@router.get("/tickets/{ticket_id}", response_model=TicketResponse)
+@router.get(
+    "/tickets/{ticket_id}",
+    response_model=SuccessResponse[TicketResponse],
+    summary="Retrieve ticket details",
+    description=(
+        "Retrieve a non-deleted support ticket by its ID. "
+        "Access is restricted according to the authenticated user's "
+        "role, ticket ownership and assignment. "
+        "Inaccessible or nonexistent tickets return HTTP 404."
+    ),
+    responses=TICKET_DETAIL_RESPONSES,
+)
 def get_ticket(
     ticket_id: int,
     db: Session = Depends(get_db),
@@ -219,24 +271,51 @@ def get_ticket(
     is_agent = has_role(current_user, "agent")
 
     if is_admin:
-        return ticket
-
+        return SuccessResponse[TicketResponse](
+            data=ticket,
+        )
     if is_agent:
         if (
             ticket.assigned_to == current_user.id
             or ticket.requester_id == current_user.id
         ):
-            return ticket
-
+            return SuccessResponse[TicketResponse](
+                data=ticket,
+            )
     elif ticket.requester_id == current_user.id:
-        return ticket
+        return SuccessResponse[TicketResponse](
+            data=ticket,
+        )
 
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found"
     )
 
 
-@router.patch("/tickets/{ticket_id}", response_model=TicketResponse)
+@router.patch(
+    "/tickets/{ticket_id}",
+    response_model=SuccessResponse[TicketResponse],
+    summary="Update a support ticket",
+    description=(
+        "Partially update an existing support ticket. "
+        "Admins can manage assignment, priority and status. "
+        "Assigned agents can update ticket status. "
+        "Ticket owners can update requester fields while their "
+        "ticket is open and unassigned. "
+        "Assigned agents must be active and belong to the ticket department. "
+        "Assignment changes trigger notification tasks."
+    ),
+    responses=TICKET_UPDATE_RESPONSES,
+    openapi_extra={
+        "requestBody": {
+            "content": {
+                "application/json": {
+                    "examples": TICKET_UPDATE_EXAMPLES,
+                },
+            },
+        },
+    },
+)
 def update_ticket(
     ticket_id: int,
     ticket_update: TicketPatch,
@@ -415,10 +494,24 @@ def update_ticket(
             "Ticket assigned",
             f"Your ticket #{ticket.id} has been assigned to an agent.",
         )
-    return ticket
+    return SuccessResponse[TicketResponse](
+        data=ticket,
+    )
 
 
-@router.delete("/tickets/{ticket_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/tickets/{ticket_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Soft-delete a support ticket",
+    description=(
+        "Soft-delete an existing ticket without physically removing "
+        "its database record. "
+        "Admins can delete tickets. "
+        "Ticket owners can delete their own open and unassigned tickets. "
+        "Successfully deleted tickets are excluded from normal retrieval."
+    ),
+    responses=TICKET_DELETE_RESPONSES,
+)
 def delete_ticket(
     ticket_id: int,
     db: Session = Depends(get_db),

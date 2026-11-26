@@ -7,7 +7,7 @@ import pytest
 
 
 def comments_url(ticket):
-    return f"/tickets/{ticket.id}/comments"
+    return f"/api/v1/tickets/{ticket.id}/comments"
 
 
 # ================================ POST comment ================================ #
@@ -23,7 +23,7 @@ def test_requester_posts_public_comment_on_own_ticket(
     )
 
     assert response.status_code == 201
-    body = response.json()
+    body = response.json()["data"]
     assert body["message"] == "Still broken, please help"  # whitespace trimmed
     assert body["is_internal"] is False
     assert body["ticket_id"] == ticket.id
@@ -44,7 +44,8 @@ def test_requester_cannot_post_internal_comment(
 
     assert response.status_code == 403
     assert (
-        response.json()["detail"] == "You are not allowed to create internal comments"
+        response.json()["error"]["message"]
+        == "You are not allowed to create internal comments"
     )
 
 
@@ -67,7 +68,7 @@ def test_assigned_agent_and_admin_can_post_internal_comments(
         )
 
         assert response.status_code == 201
-        assert response.json()["is_internal"] is True
+        assert response.json()["data"]["is_internal"] is True
 
 
 def test_stranger_cannot_comment_on_someone_elses_ticket(
@@ -103,7 +104,9 @@ def test_cannot_comment_on_unknown_or_deleted_ticket(
     db_session.commit()
 
     unknown = client.post(
-        "/tickets/999999/comments", json={"message": "Hi"}, headers=requester_headers
+        "/api/v1/tickets/999999/comments",
+        json={"message": "Hi"},
+        headers=requester_headers,
     )
     removed = client.post(
         comments_url(deleted), json={"message": "Hi"}, headers=requester_headers
@@ -167,7 +170,15 @@ def test_comments_are_returned_oldest_first(
     response = client.get(comments_url(ticket), headers=requester_headers)
 
     assert response.status_code == 200
-    assert [c["message"] for c in response.json()] == ["first", "second", "third"]
+    data = response.json()["data"]
+
+    assert data["total"] == 3
+
+    assert [c["message"] for c in data["items"]] == [
+        "first",
+        "second",
+        "third",
+    ]
 
 
 def test_requester_never_sees_internal_comments(
@@ -186,7 +197,11 @@ def test_requester_never_sees_internal_comments(
 
     response = client.get(comments_url(ticket), headers=requester_headers)
 
-    messages = [c["message"] for c in response.json()]
+    data = response.json()["data"]
+
+    messages = [c["message"] for c in data["items"]]
+
+    assert data["total"] == len(messages)
     assert messages == ["public question", "public answer"]
     assert "internal diagnosis" not in response.text
 
@@ -208,7 +223,7 @@ def test_agent_and_admin_see_internal_comments(
     for headers in (agent_headers, admin_headers):
         response = client.get(comments_url(ticket), headers=headers)
 
-        assert [c["message"] for c in response.json()] == [
+        assert [c["message"] for c in response.json()["data"]["items"]] == [
             "public question",
             "internal diagnosis",
         ]
@@ -222,7 +237,15 @@ def test_ticket_with_no_comments_returns_empty_list(
     response = client.get(comments_url(ticket), headers=requester_headers)
 
     assert response.status_code == 200
-    assert response.json() == []
+    assert response.json() == {
+        "success": True,
+        "data": {
+            "total": 0,
+            "page": 1,
+            "limit": 10,
+            "items": [],
+        },
+    }
 
 
 def test_stranger_cannot_read_comments(
@@ -253,7 +276,8 @@ def test_cannot_read_comments_of_unknown_or_deleted_ticket(
     db_session.commit()
 
     assert (
-        client.get("/tickets/999999/comments", headers=admin_headers).status_code == 404
+        client.get("/api/v1/tickets/999999/comments", headers=admin_headers).status_code
+        == 404
     )
     assert client.get(comments_url(deleted), headers=admin_headers).status_code == 404
 

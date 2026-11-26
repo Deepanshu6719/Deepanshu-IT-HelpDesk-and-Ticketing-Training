@@ -6,6 +6,11 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from api.docs.auth import (
+    LOGIN_RESPONSES,
+    LOGOUT_RESPONSES,
+    REFRESH_RESPONSES,
+)
 from core.config import settings
 from core.dependencies import get_current_user, oauth2_scheme
 from core.rate_limit import check_rate_limit
@@ -20,12 +25,28 @@ from database.dependencies import get_db
 from models.refresh_token import RefreshToken
 from models.user import User
 from models.user_session import UserSession
-from schema.auth_schema import RefreshTokenRequest
+from schema.auth_schema import (
+    LogoutResponse,
+    RefreshTokenRequest,
+    TokenResponse,
+)
+from schema.common_schema import SuccessResponse
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
-@router.post("/login")
+@router.post(
+    "/login",
+    response_model=TokenResponse,
+    summary="Authenticate a user",
+    description=(
+        "Authenticate an active Helpdesk user using their email and password. "
+        "Submit the email in the username field using OAuth2 form data. "
+        "Creates a new device session and returns an access token and refresh token. "
+        "Login attempts are limited to five requests per IP address per 60 seconds."
+    ),
+    responses=LOGIN_RESPONSES,
+)
 def login(
     request: Request,
     user_credentials: OAuth2PasswordRequestForm = Depends(),
@@ -115,7 +136,30 @@ def login(
     }
 
 
-@router.post("/refresh")
+@router.post(
+    "/refresh",
+    response_model=TokenResponse,
+    summary="Refresh authentication tokens",
+    description=(
+        "Generate a new access token and rotate the refresh token "
+        "within an existing device session. "
+        "The previously issued refresh token is revoked. "
+        "Reusing a revoked refresh token within an otherwise valid session "
+        "causes that session to be revoked."
+    ),
+    responses=REFRESH_RESPONSES,
+    openapi_extra={
+        "requestBody": {
+            "content": {
+                "application/json": {
+                    "example": {
+                        "refresh_token": "example-opaque-refresh-token",
+                    },
+                },
+            },
+        },
+    },
+)
 def refresh_access_token(
     request: RefreshTokenRequest,
     db: Session = Depends(get_db),
@@ -263,7 +307,18 @@ def refresh_access_token(
         raise
 
 
-@router.post("/logout")
+@router.post(
+    "/logout",
+    response_model=SuccessResponse[LogoutResponse],
+    summary="Log out from the current device",
+    description=(
+        "Revoke the authenticated user's current device session "
+        "and all remaining active refresh tokens associated with it. "
+        "Other device sessions are not affected. "
+        "Requires a valid Bearer access token."
+    ),
+    responses=LOGOUT_RESPONSES,
+)
 def logout(
     token: str = Depends(oauth2_scheme),
     current_user: User = Depends(get_current_user),
@@ -310,7 +365,11 @@ def logout(
         # 5. Save changes
         db.commit()
 
-        return {"message": "Successfully logged out from this device"}
+        return SuccessResponse(
+            data={
+                "message": "Successfully logged out from this device",
+            }
+        )
 
     except SQLAlchemyError:
         db.rollback()

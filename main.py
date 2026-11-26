@@ -3,31 +3,59 @@ from uuid import uuid4
 
 import structlog
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from structlog.contextvars import (
     bind_contextvars,
     clear_contextvars,
 )
 
+from api.v1.router import router as api_v1_router
 from core.error_tracking import handle_unhandled_exception
+from core.exception_handlers import (
+    handle_http_exception,
+    handle_validation_exception,
+)
 from core.logging import configure_logging
 from core.metrics import record_request_metrics
-from routes.admin import router as admin_router
-from routes.agents import router as agent_router
-from routes.auth import router as auth_router
-from routes.category import router as category_router
-from routes.comments import router as comment_router
-from routes.departments import router as department_router
+from core.openapi import (
+    API_DESCRIPTION,
+    API_TITLE,
+    API_VERSION,
+    OPENAPI_TAGS,
+)
 from routes.health import router as health_router
 from routes.metrics import router as metrics_router
-from routes.tickets import router as ticket_router
-from routes.users import router as user_router
 
 configure_logging()
 
 logger = structlog.get_logger(__name__)
 
-app = FastAPI()
+app = FastAPI(
+    title=API_TITLE,
+    description=API_DESCRIPTION,
+    version=API_VERSION,
+    openapi_tags=OPENAPI_TAGS,
+    swagger_ui_parameters={
+        "docExpansion": "none",
+        "displayRequestDuration": True,
+        "filter": True,
+        "persistAuthorization": False,
+    },
+)
+
+
+app.add_exception_handler(
+    StarletteHTTPException,
+    handle_http_exception,
+)
+
+app.add_exception_handler(
+    RequestValidationError,
+    handle_validation_exception,
+)
+
 app.add_exception_handler(
     Exception,
     handle_unhandled_exception,
@@ -106,13 +134,6 @@ async def log_requests(request: Request, call_next):
             clear_contextvars()
 
 
-app.include_router(ticket_router)
-app.include_router(category_router)
-app.include_router(admin_router)
-app.include_router(auth_router)
-app.include_router(comment_router)
-app.include_router(user_router)
-app.include_router(department_router)
-app.include_router(agent_router)
+app.include_router(api_v1_router)
 app.include_router(health_router)
 app.include_router(metrics_router)

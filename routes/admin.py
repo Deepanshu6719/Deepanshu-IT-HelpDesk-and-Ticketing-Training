@@ -3,17 +3,40 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from api.docs.resources import (
+    ROLE_ASSIGNMENT_RESPONSES,
+    request_example,
+)
 from core.dependencies import require_admin
 from database.dependencies import get_db
 from models.role import Role
 from models.user import User
 from models.user_role import UserRole
-from schema.user_schema import UserRoleAssign
+from schema.common_schema import SuccessResponse
+from schema.user_schema import UserRoleAssign, UserRoleResponse
 
-router = APIRouter(tags=["Assign role"])
+router = APIRouter(tags=["Admin"])
 
 
-@router.post("/admin/users/{user_id}/roles", status_code=201)
+@router.post(
+    "/admin/users/{user_id}/roles",
+    status_code=201,
+    response_model=SuccessResponse[UserRoleResponse],
+    summary="Assign a role to a user",
+    description=(
+        "Assign the agent or administrator role to an existing user. "
+        "A user must already have the agent role before receiving "
+        "the administrator role through this endpoint. "
+        "Duplicate role assignments return HTTP 409. "
+        "Requires administrator privileges."
+    ),
+    responses=ROLE_ASSIGNMENT_RESPONSES,
+    openapi_extra=request_example(
+        {
+            "role": "agent",
+        }
+    ),
+)
 def assign_user_role(
     role: UserRoleAssign,
     user_id: int,
@@ -83,4 +106,4 @@ def assign_user_role(
             detail="User already has this role",
         ) from exc
 
-    return user_role
+    return SuccessResponse(data=user_role)

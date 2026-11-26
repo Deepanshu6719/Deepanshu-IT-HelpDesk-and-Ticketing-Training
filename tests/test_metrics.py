@@ -187,7 +187,7 @@ def test_unhandled_exception_increments_counter():
 def test_dynamic_route_uses_route_template():
     labels = {
         "method": "GET",
-        "route": "/tickets/{ticket_id}",
+        "route": "/api/v1/tickets/{ticket_id}",
         "status_code": "401",
     }
 
@@ -198,8 +198,8 @@ def test_dynamic_route_uses_route_template():
             labels,
         )
 
-        response_one = client.get("/tickets/123")
-        response_two = client.get("/tickets/456")
+        response_one = client.get("/api/v1/tickets/123")
+        response_two = client.get("/api/v1/tickets/456")
 
         assert response_one.status_code == 401
         assert response_two.status_code == 401

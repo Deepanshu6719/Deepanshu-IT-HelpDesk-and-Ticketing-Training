@@ -5,6 +5,7 @@ from redis.exceptions import RedisError
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
+from api.docs.common import example_response
 from database.connection import engine
 from database.redis import redis_client
 
@@ -13,7 +14,20 @@ router = APIRouter(tags=["Health"])
 logger = structlog.get_logger(__name__)
 
 
-@router.get("/health")
+@router.get(
+    "/health",
+    summary="Check application liveness",
+    description=(
+        "Check whether the API process is responding. "
+        "Does not verify external dependency connectivity."
+    ),
+    responses={
+        200: example_response(
+            "Application is alive.",
+            {"status": "healthy"},
+        ),
+    },
+)
 def health_check():
     return {"status": "healthy"}
 
@@ -49,7 +63,36 @@ def check_redis() -> bool:
         return False
 
 
-@router.get("/ready")
+@router.get(
+    "/ready",
+    summary="Check application readiness",
+    description=(
+        "Verify PostgreSQL and Redis connectivity. "
+        "Returns HTTP 503 when either dependency is unavailable."
+    ),
+    responses={
+        200: example_response(
+            "All required dependencies are available.",
+            {
+                "status": "ready",
+                "checks": {
+                    "postgres": "up",
+                    "redis": "up",
+                },
+            },
+        ),
+        503: example_response(
+            "One or more dependencies are unavailable.",
+            {
+                "status": "not_ready",
+                "checks": {
+                    "postgres": "down",
+                    "redis": "up",
+                },
+            },
+        ),
+    },
+)
 def readiness_check():
     postgres_ready = check_postgres()
     redis_ready = check_redis()

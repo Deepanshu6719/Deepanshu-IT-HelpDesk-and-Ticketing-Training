@@ -13,7 +13,7 @@ from models.user import User
 from models.user_session import UserSession
 
 oauth2_scheme = OAuth2PasswordBearer(
-    tokenUrl="/auth/login",
+    tokenUrl="api/v1/auth/login",
     auto_error=True,
 )
 

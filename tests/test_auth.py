@@ -17,7 +17,9 @@ from models.user_session import UserSession
 
 
 def login(client, email, password):
-    return client.post("/auth/login", data={"username": email, "password": password})
+    return client.post(
+        "/api/v1/auth/login", data={"username": email, "password": password}
+    )
 
 
 def login_tokens(client, user, password):
@@ -31,7 +33,7 @@ def bearer(token):
 
 
 def refresh(client, refresh_token):
-    return client.post("/auth/refresh", json={"refresh_token": refresh_token})
+    return client.post("/api/v1/auth/refresh", json={"refresh_token": refresh_token})
 
 
 def in_the_past():
@@ -64,7 +66,7 @@ def test_access_token_from_login_works_on_protected_endpoint(
 ):
     tokens = login_tokens(client, requester_user, default_password)
 
-    response = client.get("/tickets", headers=bearer(tokens["access_token"]))
+    response = client.get("/api/v1/tickets", headers=bearer(tokens["access_token"]))
 
     assert response.status_code == 200
 
@@ -75,16 +77,43 @@ def test_login_with_wrong_password_returns_401_and_creates_no_session(
     response = login(client, requester_user.email, "WrongPassword123!")
 
     assert response.status_code == 401
-    assert response.json()["detail"] == "Incorrect email or password"
+    assert response.json()["error"]["message"] == "Incorrect email or password"
     assert db_session.scalars(select(UserSession)).all() == []
 
 
 def test_login_does_not_reveal_whether_the_email_exists(client, requester_user):
-    unknown_email = login(client, "nobody@example.com", "WhateverPass123!")
-    wrong_password = login(client, requester_user.email, "WrongPassword123!")
+    unknown_email = login(
+        client,
+        "nobody@example.com",
+        "WhateverPass123!",
+    )
+
+    wrong_password = login(
+        client,
+        requester_user.email,
+        "WrongPassword123!",
+    )
 
     assert unknown_email.status_code == wrong_password.status_code == 401
-    assert unknown_email.json() == wrong_password.json()
+
+    unknown_body = unknown_email.json()
+    wrong_body = wrong_password.json()
+
+    assert unknown_body["success"] is False
+    assert wrong_body["success"] is False
+
+    assert unknown_body["error"] == wrong_body["error"]
+
+    assert unknown_body["error"] == {
+        "code": "UNAUTHORIZED",
+        "message": "Incorrect email or password",
+        "details": None,
+    }
+
+    assert unknown_body["request_id"] == unknown_email.headers["X-Request-ID"]
+    assert wrong_body["request_id"] == wrong_password.headers["X-Request-ID"]
+
+    assert unknown_body["request_id"] != wrong_body["request_id"]
 
 
 def test_deactivated_user_cannot_log_in(
@@ -98,7 +127,9 @@ def test_deactivated_user_cannot_log_in(
 
 
 def test_login_without_password_returns_422(client, requester_user):
-    response = client.post("/auth/login", data={"username": requester_user.email})
+    response = client.post(
+        "/api/v1/auth/login", data={"username": requester_user.email}
+    )
 
     assert response.status_code == 422
 
@@ -131,7 +162,9 @@ def test_refresh_rotates_the_token_and_links_old_to_new(
 
     # the new access token is usable
     assert (
-        client.get("/tickets", headers=bearer(new_tokens["access_token"])).status_code
+        client.get(
+            "/api/v1/tickets", headers=bearer(new_tokens["access_token"])
+        ).status_code
         == 200
     )
 
@@ -140,7 +173,7 @@ def test_refresh_with_unknown_token_returns_401(client):
     response = refresh(client, "this-token-was-never-issued")
 
     assert response.status_code == 401
-    assert response.json()["detail"] == "Invalid refresh token"
+    assert response.json()["error"]["message"] == "Invalid refresh token"
 
 
 def test_refresh_with_empty_token_returns_422(client):
@@ -157,12 +190,14 @@ def test_reusing_an_old_refresh_token_revokes_the_whole_session(
     replay = refresh(client, tokens["refresh_token"])  # attacker replays the OLD token
 
     assert replay.status_code == 401
-    assert "reuse" in replay.json()["detail"].lower()
+    assert "reuse" in replay.json()["error"]["message"].lower()
     # Even the legitimately-issued newest token is now dead...
     assert refresh(client, newest["refresh_token"]).status_code == 401
     # ...and so is the newest access token.
     assert (
-        client.get("/tickets", headers=bearer(newest["access_token"])).status_code
+        client.get(
+            "/api/v1/tickets", headers=bearer(newest["access_token"])
+        ).status_code
         == 401
     )
     assert db_session.scalar(select(UserSession)).revoked_at is not None
@@ -179,7 +214,7 @@ def test_refresh_with_expired_refresh_token_returns_401(
     response = refresh(client, tokens["refresh_token"])
 
     assert response.status_code == 401
-    assert response.json()["detail"] == "Refresh token has expired"
+    assert response.json()["error"]["message"] == "Refresh token has expired"
 
 
 def test_refresh_with_expired_session_returns_401(
@@ -193,7 +228,7 @@ def test_refresh_with_expired_session_returns_401(
     response = refresh(client, tokens["refresh_token"])
 
     assert response.status_code == 401
-    assert response.json()["detail"] == "Session is no longer valid"
+    assert response.json()["error"]["message"] == "Session is no longer valid"
 
 
 def test_refresh_fails_after_user_is_deactivated(
@@ -206,7 +241,7 @@ def test_refresh_fails_after_user_is_deactivated(
     response = refresh(client, tokens["refresh_token"])
 
     assert response.status_code == 401
-    assert response.json()["detail"] == "User is no longer active"
+    assert response.json()["error"]["message"] == "User is no longer active"
 
 
 # ================================= LOGOUT ================================== #
@@ -216,19 +251,19 @@ def test_logout_revokes_session_refresh_token_and_access_token(
     tokens = login_tokens(client, requester_user, default_password)
     headers = bearer(tokens["access_token"])
 
-    response = client.post("/auth/logout", headers=headers)
+    response = client.post("/api/v1/auth/logout", headers=headers)
 
     assert response.status_code == 200
     assert db_session.scalar(select(UserSession)).revoked_at is not None
     assert db_session.scalar(select(RefreshToken)).revoked_at is not None
     # The same access token and refresh token are useless afterwards.
-    assert client.get("/tickets", headers=headers).status_code == 401
-    assert client.post("/auth/logout", headers=headers).status_code == 401
+    assert client.get("/api/v1/tickets", headers=headers).status_code == 401
+    assert client.post("/api/v1/auth/logout", headers=headers).status_code == 401
     assert refresh(client, tokens["refresh_token"]).status_code == 401
 
 
 def test_logout_without_token_returns_401(client):
-    assert client.post("/auth/logout").status_code == 401
+    assert client.post("/api/v1/auth/logout").status_code == 401
 
 
 def test_logout_only_ends_the_current_device_session(
@@ -237,13 +272,16 @@ def test_logout_only_ends_the_current_device_session(
     phone = login_tokens(client, requester_user, default_password)
     laptop = login_tokens(client, requester_user, default_password)
 
-    client.post("/auth/logout", headers=bearer(phone["access_token"]))
+    client.post("/api/v1/auth/logout", headers=bearer(phone["access_token"]))
 
     assert (
-        client.get("/tickets", headers=bearer(phone["access_token"])).status_code == 401
+        client.get("/api/v1/tickets", headers=bearer(phone["access_token"])).status_code
+        == 401
     )
     assert (
-        client.get("/tickets", headers=bearer(laptop["access_token"])).status_code
+        client.get(
+            "/api/v1/tickets", headers=bearer(laptop["access_token"])
+        ).status_code
         == 200
     )
 
@@ -259,14 +297,17 @@ def build_token(user, drop=(), **overrides):
 
 
 def test_request_without_authorization_header_returns_401(client):
-    assert client.get("/tickets").status_code == 401
+    assert client.get("/api/v1/tickets").status_code == 401
 
 
 def test_garbage_token_returns_401(client):
-    response = client.get("/tickets", headers=bearer("not.a.jwt"))
+    response = client.get("/api/v1/tickets", headers=bearer("not.a.jwt"))
 
     assert response.status_code == 401
-    assert response.json()["detail"] == "Invalid or expired authentication credentials"
+    assert (
+        response.json()["error"]["message"]
+        == "Invalid or expired authentication credentials"
+    )
 
 
 def test_expired_access_token_returns_401(client, requester_user):
@@ -281,10 +322,13 @@ def test_expired_access_token_returns_401(client, requester_user):
         algorithm=settings.ALGORITHM,
     )
 
-    response = client.get("/tickets", headers=bearer(expired))
+    response = client.get("/api/v1/tickets", headers=bearer(expired))
 
     assert response.status_code == 401
-    assert response.json()["detail"] == "Invalid or expired authentication credentials"
+    assert (
+        response.json()["error"]["message"]
+        == "Invalid or expired authentication credentials"
+    )
 
 
 def test_token_signed_with_wrong_secret_returns_401(client, requester_user):
@@ -299,7 +343,7 @@ def test_token_signed_with_wrong_secret_returns_401(client, requester_user):
         algorithm=settings.ALGORITHM,
     )
 
-    assert client.get("/tickets", headers=bearer(forged)).status_code == 401
+    assert client.get("/api/v1/tickets", headers=bearer(forged)).status_code == 401
 
 
 @pytest.mark.parametrize(
@@ -320,11 +364,11 @@ def test_token_with_bad_claims_is_rejected(
     client, requester_user, overrides, expected_detail
 ):
     response = client.get(
-        "/tickets", headers=bearer(build_token(requester_user, **overrides))
+        "/api/v1/tickets", headers=bearer(build_token(requester_user, **overrides))
     )
 
     assert response.status_code == 401
-    assert response.json()["detail"] == expected_detail
+    assert response.json()["error"]["message"] == expected_detail
 
 
 @pytest.mark.parametrize(
@@ -340,10 +384,10 @@ def test_token_missing_a_required_claim_is_rejected(
 ):
     token = build_token(requester_user, drop=(missing_claim,))
 
-    response = client.get("/tickets", headers=bearer(token))
+    response = client.get("/api/v1/tickets", headers=bearer(token))
 
     assert response.status_code == 401
-    assert response.json()["detail"] == expected_detail
+    assert response.json()["error"]["message"] == expected_detail
 
 
 def test_valid_token_is_rejected_after_user_is_deactivated(
@@ -352,7 +396,7 @@ def test_valid_token_is_rejected_after_user_is_deactivated(
     requester_user.is_active = False
     db_session.commit()
 
-    assert client.get("/tickets", headers=requester_headers).status_code == 401
+    assert client.get("/api/v1/tickets", headers=requester_headers).status_code == 401
 
 
 def test_token_is_rejected_when_its_session_was_revoked(
@@ -361,10 +405,10 @@ def test_token_is_rejected_when_its_session_was_revoked(
     db_session.scalar(select(UserSession)).revoked_at = datetime.now(UTC)
     db_session.commit()
 
-    response = client.get("/tickets", headers=requester_headers)
+    response = client.get("/api/v1/tickets", headers=requester_headers)
 
     assert response.status_code == 401
-    assert response.json()["detail"] == "Session is no longer valid"
+    assert response.json()["error"]["message"] == "Session is no longer valid"
 
 
 def test_token_is_rejected_when_its_session_expired(
@@ -373,7 +417,7 @@ def test_token_is_rejected_when_its_session_expired(
     db_session.scalar(select(UserSession)).expires_at = in_the_past()
     db_session.commit()
 
-    assert client.get("/tickets", headers=requester_headers).status_code == 401
+    assert client.get("/api/v1/tickets", headers=requester_headers).status_code == 401
 
 
 def test_token_cannot_use_another_users_session(
@@ -386,7 +430,7 @@ def test_token_cannot_use_another_users_session(
     stolen_session_id = agents_session.id
     token = build_token(requester_user, sid=stolen_session_id)
 
-    response = client.get("/tickets", headers=bearer(token))
+    response = client.get("/api/v1/tickets", headers=bearer(token))
 
     assert response.status_code == 401
-    assert response.json()["detail"] == "Session is no longer valid"
+    assert response.json()["error"]["message"] == "Session is no longer valid"

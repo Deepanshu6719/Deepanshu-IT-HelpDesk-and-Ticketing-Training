@@ -7,7 +7,7 @@ from core.permissions import has_role
 
 def assign(client, user_id, role, headers):
     return client.post(
-        f"/admin/users/{user_id}/roles", json={"role": role}, headers=headers
+        f"/api/v1/admin/users/{user_id}/roles", json={"role": role}, headers=headers
     )
 
 
@@ -25,7 +25,10 @@ def test_user_must_be_an_agent_before_becoming_admin(
     response = assign(client, requester_user.id, "admin", admin_headers)
 
     assert response.status_code == 400
-    assert response.json()["detail"] == "User must be an agent before becoming an admin"
+    assert (
+        response.json()["error"]["message"]
+        == "User must be an agent before becoming an admin"
+    )
     db_session.refresh(requester_user)
     assert has_role(requester_user, "admin") is False
 
@@ -53,7 +56,7 @@ def test_assigning_the_same_role_twice_returns_409(
     response = assign(client, url_user_id, "agent", admin_headers)
 
     assert response.status_code == 409
-    assert response.json()["detail"] == "User already has this role"
+    assert response.json()["error"]["message"] == "User already has this role"
 
 
 def test_assign_role_to_unknown_user_returns_404(client, admin_headers):
@@ -76,7 +79,7 @@ def test_only_admins_can_assign_roles(client, request, requester_user, headers_f
 
 def test_assign_role_requires_authentication(client, requester_user):
     response = client.post(
-        f"/admin/users/{requester_user.id}/roles", json={"role": "agent"}
+        f"/api/v1/admin/users/{requester_user.id}/roles", json={"role": "agent"}
     )
 
     assert response.status_code == 401

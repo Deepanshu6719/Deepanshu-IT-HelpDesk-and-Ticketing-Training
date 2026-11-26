@@ -2,6 +2,8 @@ import structlog
 from fastapi import Request, status
 from fastapi.responses import JSONResponse
 
+from core.exception_handlers import build_error_response
+
 logger = structlog.get_logger(__name__)
 
 
@@ -32,16 +34,8 @@ async def handle_unhandled_exception(
         exc_info=exc,
     )
 
-    headers = {}
-
-    if request_id is not None:
-        headers["X-Request-ID"] = request_id
-
-    return JSONResponse(
+    return build_error_response(
+        request=request,
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content={
-            "detail": "Internal server error",
-            "request_id": request_id,
-        },
-        headers=headers,
+        message="Internal server error",
     )

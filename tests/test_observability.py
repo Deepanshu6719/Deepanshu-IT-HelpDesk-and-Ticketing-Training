@@ -39,7 +39,12 @@ def test_unhandled_exception_returns_request_id():
         assert UUID(request_id).version == 4
 
         assert response.json() == {
-            "detail": "Internal server error",
+            "success": False,
+            "error": {
+                "code": "INTERNAL_SERVER_ERROR",
+                "message": "Internal server error",
+                "details": None,
+            },
             "request_id": request_id,
         }
 
@@ -164,7 +169,12 @@ def test_authenticated_exception_logs_user_context(
         request_id = response.headers["X-Request-ID"]
 
         assert response.json() == {
-            "detail": "Internal server error",
+            "success": False,
+            "error": {
+                "code": "INTERNAL_SERVER_ERROR",
+                "message": "Internal server error",
+                "details": None,
+            },
             "request_id": request_id,
         }
 
