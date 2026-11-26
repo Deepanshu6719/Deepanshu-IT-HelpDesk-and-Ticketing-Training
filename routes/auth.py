@@ -15,6 +15,7 @@ from core.config import settings
 from core.dependencies import get_current_user, oauth2_scheme
 from core.rate_limit import check_rate_limit
 from core.security import (
+    DUMMY_PASSWORD_HASH,
     create_access_token,
     create_refresh_token,
     decode_access_token,
@@ -61,17 +62,15 @@ def login(
     statement = select(User).where(User.email == user_credentials.username)
     user = db.scalar(statement)
 
-    # 2. Verify user credentials
-    if user is None or not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
-        )
+    # 2. Verify credentials even when the account does not exist
+    stored_hash = user.hashed_password if user is not None else DUMMY_PASSWORD_HASH
 
-    if not verify_password(
+    password_valid = verify_password(
         user_credentials.password,
-        user.hashed_password,
-    ):
+        stored_hash,
+    )
+
+    if user is None or not user.is_active or not password_valid:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
@@ -146,6 +145,8 @@ def login(
         "The previously issued refresh token is revoked. "
         "Reusing a revoked refresh token within an otherwise valid session "
         "causes that session to be revoked."
+        "Refresh requests are limited to 20 attempts "
+        "per client IP per 60 seconds."
     ),
     responses=REFRESH_RESPONSES,
     openapi_extra={
@@ -161,9 +162,18 @@ def login(
     },
 )
 def refresh_access_token(
+    http_request: Request,
     request: RefreshTokenRequest,
     db: Session = Depends(get_db),
 ):
+    client_ip = http_request.client.host if http_request.client else "unknown"
+
+    check_rate_limit(
+        key=f"helpdesk:rate_limit:refresh:{client_ip}",
+        limit=20,
+        window=60,
+    )
+
     try:
         # 1. Hash the refresh token received from the client
         token_hash = hash_refresh_token(request.refresh_token)

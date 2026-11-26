@@ -2,6 +2,7 @@
 # convert values in declared python types,
 # validate config values,load values from .env
 # Settings is a class that defines how configuration should be loaded.
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -33,6 +34,35 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
     )
+    # CORS configuration
+    CORS_ALLOWED_ORIGINS: list[str] = Field(
+        default_factory=lambda: ["http://localhost:3000"]
+    )
+
+    # Security configuration
+    SECURITY_HSTS_ENABLED: bool = False
+    SECURITY_HSTS_MAX_AGE: int = Field(
+        default=31536000,
+        ge=0,
+    )
+
+    @field_validator("CORS_ALLOWED_ORIGINS")
+    @classmethod
+    def validate_cors_origins(
+        cls,
+        origins: list[str],
+    ) -> list[str]:
+        for origin in origins:
+            if "*" in origin:
+                raise ValueError("Wildcard CORS origins are not allowed")
+
+            if not origin.startswith(("http://", "https://")):
+                raise ValueError("CORS origins must use HTTP or HTTPS")
+
+            if origin.endswith("/"):
+                raise ValueError("CORS origins must not end with a slash")
+
+        return origins
 
 
 settings = Settings()  # creates an object and loads the actual configuration values.

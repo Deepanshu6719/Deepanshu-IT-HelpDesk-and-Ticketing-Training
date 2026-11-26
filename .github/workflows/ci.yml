@@ -1,4 +1,3 @@
-
 name: Helpdesk CI
 
 on:
@@ -10,7 +9,7 @@ permissions:
 
 jobs:
   test:
-    name: Lint and Test
+    name: Lint, Security and Test
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -78,6 +77,15 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements-dev.txt
 
+      - name: Check dependency compatibility
+        run: python -m pip check
+
+      - name: Audit production dependencies
+        run: python -m pip_audit -r requirements.txt
+
+      - name: Audit installed dependencies
+        run: python -m pip_audit
+
       - name: Run Ruff linting
         run: ruff check .
 
@@ -85,4 +93,4 @@ jobs:
         run: ruff format --check .
 
       - name: Run regression tests
-        run: python -m pytest -v
+        run: python -m pytest -v -W error

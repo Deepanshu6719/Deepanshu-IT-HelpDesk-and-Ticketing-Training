@@ -171,9 +171,20 @@ def create_ticket(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    statement = select(Category).where(Category.name == ticket.category)
+    statement = select(Category).where(
+        Category.name == ticket.category,
+        Category.is_active.is_(True),
+    )
 
-    category = db.scalar(statement)
+    categories = db.scalars(statement).all()
+
+    if len(categories) != 1:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Invalid or inactive category",
+        )
+
+    category = categories[0]
 
     if category is None or not category.is_active:
         raise HTTPException(
@@ -410,16 +421,19 @@ def update_ticket(
     # Resolve category name into database IDs
     if "category" in update_data:
         category_statement = select(Category).where(
-            Category.name == update_data["category"]
+            Category.name == update_data["category"],
+            Category.is_active.is_(True),
         )
 
-        category = db.scalar(category_statement)
+        categories = db.scalars(category_statement).all()
 
-        if category is None:
+        if len(categories) != 1:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="Invalid category",
             )
+
+        category = categories[0]
 
         update_data["category_id"] = category.id
         update_data["department_id"] = category.department_id

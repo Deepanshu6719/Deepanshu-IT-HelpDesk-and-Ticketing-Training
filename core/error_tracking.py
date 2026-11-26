@@ -1,8 +1,10 @@
 import structlog
-from fastapi import Request, status
+from fastapi import Request
 from fastapi.responses import JSONResponse
 
+from core.config import settings
 from core.exception_handlers import build_error_response
+from core.security_headers import apply_security_headers
 
 logger = structlog.get_logger(__name__)
 
@@ -34,8 +36,16 @@ async def handle_unhandled_exception(
         exc_info=exc,
     )
 
-    return build_error_response(
+    response = build_error_response(
         request=request,
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        status_code=500,
         message="Internal server error",
     )
+    apply_security_headers(
+        response.headers,
+        hsts_enabled=settings.SECURITY_HSTS_ENABLED,
+        hsts_max_age=settings.SECURITY_HSTS_MAX_AGE,
+        is_https=request.url.scheme == "https",
+    )
+
+    return response

@@ -2,6 +2,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from schema.common_schema import StrictRequestModel
+
 
 class DepartmentResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -11,7 +13,7 @@ class DepartmentResponse(BaseModel):
     created_at: datetime
 
 
-class DepartmentCreate(BaseModel):
+class DepartmentCreate(StrictRequestModel):
     name: str = Field(min_length=2, max_length=100)
 
     @field_validator("name", mode="before")
@@ -26,7 +28,7 @@ class DepartmentCreate(BaseModel):
         return value
 
 
-class DepartmentPatch(BaseModel):
+class DepartmentPatch(StrictRequestModel):
     name: str | None = Field(
         default=None,
         min_length=2,

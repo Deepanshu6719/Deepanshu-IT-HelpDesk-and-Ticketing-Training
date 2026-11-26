@@ -12,6 +12,7 @@ from structlog.contextvars import (
 )
 
 from api.v1.router import router as api_v1_router
+from core.config import settings
 from core.error_tracking import handle_unhandled_exception
 from core.exception_handlers import (
     handle_http_exception,
@@ -25,6 +26,7 @@ from core.openapi import (
     API_VERSION,
     OPENAPI_TAGS,
 )
+from core.security_headers import SecurityHeadersMiddleware
 from routes.health import router as health_router
 from routes.metrics import router as metrics_router
 
@@ -62,10 +64,28 @@ app.add_exception_handler(
 )
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=settings.CORS_ALLOWED_ORIGINS,
+    allow_credentials=False,
+    allow_methods=[
+        "GET",
+        "POST",
+        "PATCH",
+        "DELETE",
+        "OPTIONS",
+    ],
+    allow_headers=[
+        "Authorization",
+        "Content-Type",
+    ],
+    expose_headers=[
+        "X-Request-ID",
+    ],
+    max_age=600,
+)
+app.add_middleware(
+    SecurityHeadersMiddleware,
+    hsts_enabled=settings.SECURITY_HSTS_ENABLED,
+    hsts_max_age=settings.SECURITY_HSTS_MAX_AGE,
 )
 
 
