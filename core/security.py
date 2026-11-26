@@ -13,6 +13,7 @@ from pwdlib import PasswordHash
 from core.config import settings
 
 password_hash = PasswordHash.recommended()  # uses Argon2id the password hashing config
+DUMMY_PASSWORD_HASH = password_hash.hash(secrets.token_urlsafe(32))
 
 
 # password hashing

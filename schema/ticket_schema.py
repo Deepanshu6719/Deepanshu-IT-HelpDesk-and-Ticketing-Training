@@ -3,6 +3,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from schema.common_schema import StrictRequestModel
+
 
 class CategoryResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -10,9 +12,7 @@ class CategoryResponse(BaseModel):
     name: str
 
 
-class CategoryCreate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class CategoryCreate(StrictRequestModel):
     name: str = Field(min_length=2, max_length=100)
     department_id: int = Field(gt=0)
 
@@ -28,9 +28,7 @@ class CategoryCreate(BaseModel):
         return value
 
 
-class CategoryPatch(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class CategoryPatch(StrictRequestModel):
     name: str | None = Field(default=None, min_length=2, max_length=100)
 
     @field_validator("name", mode="before")
@@ -57,8 +55,7 @@ class UserSummary(BaseModel):
     email: str
 
 
-class TicketCreate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+class TicketCreate(StrictRequestModel):
     title: str = Field(min_length=5, max_length=50)
     description: str = Field(min_length=10, max_length=150)
     category: str
@@ -105,9 +102,7 @@ class TicketResponse(BaseModel):
     updated_at: datetime
 
 
-class TicketPatch(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class TicketPatch(StrictRequestModel):
     title: str | None = Field(default=None, min_length=5, max_length=50)
     description: str | None = Field(default=None, min_length=10, max_length=150)
     category: str | None = None
@@ -138,11 +133,3 @@ class TicketPatch(BaseModel):
             if len(value) < 10:
                 raise ValueError("Description must contain at least 10 characters")
         return value
-
-
-class TicketListResponse(BaseModel):
-    items: list[TicketResponse]
-    total: int
-    page: int
-    page_size: int
-    total_pages: int

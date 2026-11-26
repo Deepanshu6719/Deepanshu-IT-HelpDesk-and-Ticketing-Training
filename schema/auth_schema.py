@@ -2,8 +2,10 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from schema.common_schema import StrictRequestModel
 
-class RefreshTokenRequest(BaseModel):
+
+class RefreshTokenRequest(StrictRequestModel):
     refresh_token: str = Field(min_length=1)
 
 

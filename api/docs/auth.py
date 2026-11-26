@@ -84,7 +84,12 @@ REFRESH_RESPONSES = {
         },
     },
 }
-
+REFRESH_RESPONSES.update(
+    {
+        429: RATE_LIMIT_RESPONSE,
+        503: SERVICE_UNAVAILABLE_RESPONSE,
+    }
+)
 
 LOGOUT_RESPONSES = {
     200: {

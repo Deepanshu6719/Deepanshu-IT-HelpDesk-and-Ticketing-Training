@@ -2,10 +2,10 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from schema.common_schema import StrictRequestModel
 
-class CommentCreate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
 
+class CommentCreate(StrictRequestModel):
     message: str = Field(min_length=1, max_length=2000)
     is_internal: bool = False
 

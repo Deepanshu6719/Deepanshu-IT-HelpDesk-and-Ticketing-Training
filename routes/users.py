@@ -1,5 +1,7 @@
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -17,9 +19,11 @@ from core.pagination_utils import paginate_query
 from core.security import get_password_hash, verify_password
 from database.dependencies import get_db
 from models.department import Department
+from models.refresh_token import RefreshToken
 from models.role import Role
 from models.user import User
 from models.user_role import UserRole
+from models.user_session import UserSession
 from schema.common_schema import PaginatedResponse, SuccessResponse
 from schema.user_schema import (
     PasswordChange,
@@ -247,10 +251,11 @@ def update_user_status(
     summary="Change the current user's password",
     description=(
         "Change the authenticated user's password after verifying "
-        "their current password. "
-        "The new password must differ from the existing password. "
-        "Previously issued access tokens are invalidated by "
-        "incrementing the user's token version."
+        "the current password. "
+        "The new password must differ from the current password. "
+        "All existing device sessions, access tokens and refresh "
+        "tokens are invalidated. "
+        "The user must authenticate again on every device."
     ),
     responses=PASSWORD_CHANGE_RESPONSES,
     openapi_extra=request_example(
@@ -286,9 +291,35 @@ def change_password(
         )
 
     try:
+        now = datetime.now(UTC)
+
+        session_ids = select(UserSession.id).where(
+            UserSession.user_id == current_user.id
+        )
+
+        # Revoke every existing device session
+        db.execute(
+            update(UserSession)
+            .where(
+                UserSession.user_id == current_user.id,
+                UserSession.revoked_at.is_(None),
+            )
+            .values(revoked_at=now)
+        )
+
+        # Revoke all remaining refresh tokens
+        db.execute(
+            update(RefreshToken)
+            .where(
+                RefreshToken.session_id.in_(session_ids),
+                RefreshToken.revoked_at.is_(None),
+            )
+            .values(revoked_at=now)
+        )
+
+        # Update password and invalidate access tokens
         current_user.hashed_password = get_password_hash(password_data.new_password)
 
-        # Invalidate all previously issued access tokens
         current_user.token_version += 1
 
         db.commit()
@@ -296,7 +327,6 @@ def change_password(
     except Exception:
         db.rollback()
         raise
-
     return SuccessResponse(
         data={
             "message": "Password changed successfully",

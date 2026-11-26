@@ -1,18 +1,30 @@
-.venv/
-__pycache__/
-.vscode/
-
+# Environment secrets
 .env
 .env.*
 !.env.example
 
-test_persistence.py
-Helpdesk Local.session.sql
+# Private keys
+*.pem
+*.key
+*.p12
+*.pfx
 
-
-*.py[cod]
-.pytest_cache/
-
-.ruff_cache/
-scratch.py
+# Database backups and local SQL sessions
 *.dump
+*.backup
+*.sql
+*.sqlite
+*.sqlite3
+
+# Python environments
+.venv/
+venv/
+__pycache__/
+
+# Testing and linting
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+# Local IDE configuration
+.vscode/
