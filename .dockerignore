@@ -19,3 +19,19 @@ test_persistence.py
 *.sql
 
 performance-results/
+
+# Private keys and certificates
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Additional database backup formats
+*.backup
+*.sqlite
+*.sqlite3
+
+# Additional local environments and test artifacts
+venv/
+.coverage
+htmlcov/

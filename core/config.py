@@ -50,6 +50,16 @@ class Settings(BaseSettings):
     DB_POOL_TIMEOUT: int = Field(default=3, gt=0)
     DB_POOL_RECYCLE: int = Field(default=1800, gt=0)
 
+    # Docker application configuration
+    APP_PORT: int = Field(default=8001, ge=1, le=65535)
+
+    # Initial administrator provisioning
+    BOOTSTRAP_ADMIN_EMAIL: str | None = None
+    BOOTSTRAP_ADMIN_PASSWORD: str | None = Field(
+        default=None,
+        repr=False,
+    )
+
     @field_validator("CORS_ALLOWED_ORIGINS")
     @classmethod
     def validate_cors_origins(
