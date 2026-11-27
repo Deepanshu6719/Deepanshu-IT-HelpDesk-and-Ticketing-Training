@@ -133,3 +133,94 @@ Added eight tests covering:
 Automated permission and database integrity verification passed.
 
 Permanent data repair and deployment migration verification must be recorded before submission. Domain-specific permission adaptations remain subject to mentor approval.
+
+## Checkpoint 3 — Ticket CRUD, Pagination & Filtering
+
+### Existing Implementation
+
+The Helpdesk application provides complete ticket CRUD functionality through versioned API endpoints.
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| POST | /api/v1/tickets | Create a ticket |
+| GET | /api/v1/tickets | List accessible tickets |
+| GET | /api/v1/tickets/{id} | Retrieve a ticket |
+| PATCH | /api/v1/tickets/{id} | Partially update a ticket |
+| DELETE | /api/v1/tickets/{id} | Soft-delete a ticket |
+
+### Partial Update Verification
+
+Verified that PATCH updates only explicitly provided fields while preserving omitted business fields.
+
+The updated_at timestamp is excluded from unchanged-field assertions because successful modifications are expected to update it.
+
+Explicit null values are rejected for non-nullable requester-controlled fields.
+
+Empty PATCH requests are rejected under the existing validation contract.
+
+### Pagination and Filtering
+
+Verified that pagination works together with:
+
+- Status filtering.
+- Priority filtering.
+- Category filtering.
+- Department filtering.
+- Case-insensitive search.
+
+Combined filtering tests confirmed:
+
+- Matching records are returned across consecutive pages.
+- No duplicate or missing matching records occur for an unchanged dataset.
+- The total represents all accessible matching records before pagination.
+- Requests beyond the available page range return an empty items list while preserving the correct total.
+- Soft-deleted tickets are excluded from filtered results and totals.
+
+### Authorization and Data Isolation
+
+Verified that unauthorized tickets do not appear in filtered results or pagination totals.
+
+Users from the same department cannot automatically access each other's tickets.
+
+Users from different departments cannot access unrelated tickets merely by guessing their IDs.
+
+Ticket visibility continues to follow the existing Helpdesk permission model:
+
+- Administrators can access all non-deleted tickets.
+- Agents can access assigned tickets and tickets they requested.
+- Requesters can access their own tickets.
+
+Existing object-level authorization and database-state preservation tests remain passing.
+
+### Additional Regression Tests
+
+Added `tests/test_checkpoint_crud.py` containing nine test cases:
+
+1. Partial title update preserves omitted business fields.
+2. Explicit null title rejection.
+3. Explicit null description rejection.
+4. Explicit null category rejection.
+5. Explicit null requested priority rejection.
+6. Combined search, filtering and pagination.
+7. Authorization-aware filtered results and totals.
+8. Pagination beyond available filtered results.
+9. Soft-deleted ticket exclusion from filtered results.
+
+### Test Results
+
+| Verification | Result |
+|---|---|
+| Previous regression baseline | 431 passed |
+| Existing targeted ticket tests | 115 passed |
+| New checkpoint tests | 9 passed |
+| Final regression suite | 440 passed |
+
+### Database and Application Changes
+
+No application code changes or database migrations were required.
+
+Existing CRUD, filtering, pagination and authorization implementations satisfied the tested requirements.
+
+### Status
+
+Technical verification completed successfully. Final acceptance remains subject to CI verification and mentor review.
