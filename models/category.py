@@ -19,6 +19,11 @@ class Category(Base):
             "department_id",
             name="uq_categories_name_department_id",
         ),
+        UniqueConstraint(
+            "id",
+            "department_id",
+            name="uq_categories_id_department_id",
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -37,4 +42,7 @@ class Category(Base):
         nullable=False,
     )
     department: Mapped["Department"] = relationship(back_populates="categories")
-    tickets: Mapped[list["Ticket"]] = relationship(back_populates="category")
+    tickets: Mapped[list["Ticket"]] = relationship(
+        back_populates="category",
+        foreign_keys="Ticket.category_id",
+    )

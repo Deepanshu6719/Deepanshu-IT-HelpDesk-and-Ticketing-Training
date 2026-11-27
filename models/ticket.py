@@ -1,7 +1,16 @@
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, String, Text, text
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    ForeignKeyConstraint,
+    Index,
+    String,
+    Text,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from models.base import Base
@@ -19,6 +28,11 @@ class Ticket(Base):
         CheckConstraint(
             "status IN ('open','under_review', 'in_progress', 'resolved', 'closed')",
             name="check_ticket_status",
+        ),
+        ForeignKeyConstraint(
+            ["category_id", "department_id"],
+            ["categories.id", "categories.department_id"],
+            name="fk_tickets_category_department",
         ),
     )
 
@@ -56,7 +70,10 @@ class Ticket(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    category: Mapped["Category"] = relationship(back_populates="tickets")
+    category: Mapped["Category"] = relationship(
+        back_populates="tickets",
+        foreign_keys=[category_id],
+    )
     department: Mapped["Department"] = relationship(back_populates="tickets")
     requester: Mapped["User"] = relationship(
         "User", foreign_keys=[requester_id], back_populates="requested_tickets"
