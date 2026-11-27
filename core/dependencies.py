@@ -4,12 +4,14 @@ from uuid import UUID
 import jwt
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.orm import Session, joinedload
 
 from core.permissions import has_role
 from core.security import decode_access_token
 from database.dependencies import get_db
 from models.user import User
+from models.user_role import UserRole
 from models.user_session import UserSession
 
 oauth2_scheme = OAuth2PasswordBearer(
@@ -53,7 +55,13 @@ def get_current_user(
         ) from None
 
     # Step 3: Retrieve and validate user
-    user = db.get(User, user_id)
+    user_statement = (
+        select(User)
+        .options(joinedload(User.role_assignments).joinedload(UserRole.role))
+        .where(User.id == user_id)
+    )
+
+    user = db.scalars(user_statement).unique().one_or_none()
 
     if user is None or not user.is_active:
         raise HTTPException(

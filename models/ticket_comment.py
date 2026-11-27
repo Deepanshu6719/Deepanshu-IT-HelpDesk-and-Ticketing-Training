@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from models.base import Base
@@ -25,3 +25,11 @@ class TicketComment(Base):
     )
     ticket: Mapped["Ticket"] = relationship(back_populates="comments")
     author: Mapped["User"] = relationship(back_populates="comments")
+
+
+Index(
+    "ix_ticket_comments_ticket_created_id",
+    TicketComment.ticket_id,
+    TicketComment.created_at,
+    TicketComment.id,
+)
