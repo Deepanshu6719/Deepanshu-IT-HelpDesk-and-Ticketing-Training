@@ -13,6 +13,7 @@ from api.docs.resources import (
     USER_STATUS_RESPONSES,
     request_example,
 )
+from core.dashboard_cache import invalidate_dashboard_cache
 from core.dependencies import get_current_user, require_admin
 from core.pagination import Pagination
 from core.pagination_utils import paginate_query
@@ -237,11 +238,12 @@ def update_user_status(
 
     try:
         db.commit()
-        db.refresh(user)
+
     except Exception:
         db.rollback()
         raise
-
+    invalidate_dashboard_cache()
+    db.refresh(user)
     return SuccessResponse(data=user)
 
 

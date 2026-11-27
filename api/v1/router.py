@@ -9,6 +9,7 @@ from routes.agents import router as agent_router
 from routes.auth import router as auth_router
 from routes.category import router as category_router
 from routes.comments import router as comment_router
+from routes.dashboard import router as dashboard_router
 from routes.departments import router as department_router
 from routes.tickets import router as ticket_router
 from routes.users import router as user_router
@@ -29,3 +30,4 @@ router.include_router(comment_router)
 router.include_router(user_router)
 router.include_router(department_router)
 router.include_router(agent_router)
+router.include_router(dashboard_router)

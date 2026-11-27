@@ -14,10 +14,12 @@ from api.docs.tickets import (
     TICKET_UPDATE_EXAMPLES,
     TICKET_UPDATE_RESPONSES,
 )
+from core.dashboard_cache import invalidate_dashboard_cache
 from core.dependencies import get_current_user
 from core.pagination import Pagination
 from core.pagination_utils import paginate_query
 from core.permissions import has_role
+from core.ticket_scope import ticket_visibility_filters
 from database.dependencies import get_db
 from models.category import Category
 from models.role import Role
@@ -77,7 +79,7 @@ def get_tickets(
             selectinload(Ticket.requester),
             selectinload(Ticket.assigned_agent),
         )
-        .where(Ticket.is_deleted.is_(False))
+        .where(*ticket_visibility_filters(current_user))
     )
     is_admin = has_role(current_user, "admin")
     is_agent = has_role(current_user, "agent")
@@ -217,11 +219,12 @@ def create_ticket(
     try:
         db.add(new_ticket)
         db.commit()
-        db.refresh(new_ticket)
 
     except Exception:
         db.rollback()
         raise
+    invalidate_dashboard_cache()
+    db.refresh(new_ticket)
     # Notify all active admins
     for admin_email in admin_emails:
         send_notification.delay(
@@ -485,12 +488,13 @@ def update_ticket(
 
     try:
         db.commit()
-        db.refresh(ticket)
 
     except Exception:
         db.rollback()
         raise
 
+    invalidate_dashboard_cache()
+    db.refresh(ticket)
     # Notify only when a ticket is newly assigned or reassigned
     if ticket.assigned_to is not None and ticket.assigned_to != previous_assigned_to:
         assigned_agent = ticket.assigned_agent
@@ -570,3 +574,4 @@ def delete_ticket(
     except Exception:
         db.rollback()
         raise
+    invalidate_dashboard_cache()

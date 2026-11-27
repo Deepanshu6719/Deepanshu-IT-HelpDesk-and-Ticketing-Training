@@ -206,3 +206,59 @@ Manual verification results must be recorded before final submission.
 
 ## 10. Regression Testing
 
+
+
+## Dashboard Cache Benchmark — Module 16 Checkpoint 4
+
+Date: November 27, 2026
+
+### Environment
+
+- PostgreSQL database: `helpdesk_perf`
+- Total tickets: 100,000
+- Active tickets: 90,000
+- Soft-deleted tickets: 10,000
+- Redis database: 13
+- API server: Uvicorn, localhost port 8002
+- Benchmark user: Performance administrator
+- Dashboard cache TTL: 60 seconds
+- Benchmark script: `scripts/performance/benchmark_dashboard.py`
+
+### Methodology
+
+Executed five warm-up requests followed by 50 paired cache MISS and cache HIT measurements.
+
+Each iteration invalidated the dashboard generation, retrieved a fresh dashboard response, and immediately repeated the request using the cached result.
+
+The same HTTP connection was reused, and response consistency was checked for every pair.
+
+### Results
+
+| Metric | Cache MISS | Cache HIT |
+|---|---:|---:|
+| Requests | 50 | 50 |
+| Mean latency | 20.889 ms | 4.238 ms |
+| Median latency | 20.738 ms | 4.088 ms |
+| P95 latency | 22.368 ms | 5.418 ms |
+| Minimum latency | 19.065 ms | 3.350 ms |
+| Maximum latency | 30.578 ms | 6.061 ms |
+
+- Median latency reduction: 80.29%.
+- Median speedup: 5.07x.
+- Response consistency: PASSED.
+
+### Conclusion
+
+Redis caching significantly reduced dashboard response latency by avoiding repeated PostgreSQL ticket aggregation.
+
+Authentication and session validation remain active on every request.
+
+Generation-based invalidation prevents obsolete cache entries from being reused by subsequent requests. Obsolete dashboard entries expire automatically through their configured TTL.
+
+### Limitations
+
+The benchmark measures sequential HTTP request latency in a local development environment. It does not measure concurrent dashboard throughput or distributed deployment performance.
+
+Cache invalidation and PostgreSQL commits are not atomic. Failed invalidation can temporarily leave stale dashboard statistics until cache expiration.
+
+Aggregate-query avoidance on cache HIT is supported by automated service invocation tests; SQL query counts were not independently measured during this HTTP benchmark.

@@ -6,7 +6,8 @@ API_DESCRIPTION = """
 ## Overview
 
 A REST API for managing internal IT support requests,
-ticket assignments, departments, categories and users.
+ticket assignments, departments, categories, users
+and role-based ticket dashboards.
 
 ## Authentication
 
@@ -23,7 +24,13 @@ refresh token rotation and session management.
 ## API versioning
 
 All business endpoints are available under `/api/v1`.
+## Dashboard
 
+Authenticated users can retrieve ticket statistics based
+on their roles, ownership and agent assignments.
+
+Dashboard responses are cached in Redis with a 60-second
+TTL and invalidated after relevant database changes.
 ## Observability
 
 Every HTTP request includes a unique `X-Request-ID`
@@ -38,6 +45,10 @@ OPENAPI_TAGS = [
     {
         "name": "Tickets",
         "description": "Create, retrieve, update and soft-delete support tickets.",
+    },
+    {
+        "name": "Dashboard",
+        "description": ("Retrieve role-based ticket statistics with Redis caching."),
     },
     {
         "name": "Comments",
