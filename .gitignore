@@ -32,3 +32,6 @@ htmlcov/
 
 # Generated performance benchmark reports
 /performance-results/
+
+# Allow version-controlled maintenance SQL scripts
+!scripts/maintenance/*.sql
