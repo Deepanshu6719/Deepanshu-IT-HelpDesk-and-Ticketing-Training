@@ -224,3 +224,141 @@ Existing CRUD, filtering, pagination and authorization implementations satisfied
 ### Status
 
 Technical verification completed successfully. Final acceptance remains subject to CI verification and mentor review.
+
+## Checkpoint 4 — Background Jobs, Caching & Observability
+
+### Dashboard Implementation
+
+Implemented the authenticated dashboard endpoint:
+
+`GET /api/v1/dashboard/me`
+
+The dashboard provides:
+
+- Total accessible non-deleted tickets.
+- Ticket counts by status.
+- Ticket counts by actual priority.
+- Assigned and unassigned ticket counts.
+
+The dashboard and ticket-list endpoint share reusable ticket visibility filters through `core/ticket_scope.py`.
+
+Dashboard statistics are calculated using a single PostgreSQL aggregate query implemented in `services/dashboard.py`.
+
+### Redis Caching
+
+Implemented user-specific dashboard caching using the following key structure:
+
+`helpdesk:dashboard:v1:{generation}:{scope}:{user_id}`
+
+- Dashboard cache TTL: 60 seconds.
+- Cache isolation by user ID and effective role.
+- Authentication and session validation occur before cache access.
+- PostgreSQL fallback when dashboard caching is unavailable.
+- Recovery from malformed or schema-invalid cached data.
+
+### Cache Invalidation
+
+Implemented UUID-based generation invalidation following successful database commits for:
+
+- Ticket creation, updates and soft deletion.
+- Agent assignment, reassignment and unassignment.
+- Ticket status and priority changes.
+- User role assignment.
+- User activation and deactivation.
+
+Obsolete cache generations are no longer used by subsequent requests. Their response keys expire automatically.
+
+A deterministic race-condition test verifies that writing data into an obsolete generation does not overwrite the current dashboard cache.
+
+### Performance Verification
+
+Benchmarked the administrator dashboard using 100,000 tickets, including 90,000 non-deleted tickets.
+
+The benchmark executed 50 paired cache MISS and HIT measurements after five warm-up requests.
+
+| Metric | Cache MISS | Cache HIT |
+|---|---:|---:|
+| Mean latency | 20.889 ms | 4.238 ms |
+| Median latency | 20.738 ms | 4.088 ms |
+| P95 latency | 22.368 ms | 5.418 ms |
+
+- Median latency reduction: 80.29%.
+- Median speedup: 5.07x.
+- Response consistency: PASSED.
+
+Detailed methodology and results are recorded in `docs/performance-notes.md`.
+
+### Real Celery Background Execution
+
+Started an isolated Celery worker using Redis broker database 12.
+
+Created a verification ticket through the running API.
+
+- Ticket ID: 100001.
+- HTTP response: 201 Created.
+- Notification tasks received: 2.
+- Notification tasks successfully executed: 2.
+- Distinct Celery task IDs: verified.
+- Structured JSON worker logs: verified.
+- HTTP-to-Celery request ID propagation: verified.
+
+The notification tasks execute through the real Redis broker and Celery worker. External email delivery remains simulated.
+
+### Observability Verification
+
+Verified:
+
+- Structured HTTP request logging.
+- Unique X-Request-ID response headers.
+- Request ID propagation into Celery tasks.
+- Liveness endpoint: GET /health.
+- Readiness endpoint: GET /ready.
+- Prometheus endpoint: GET /metrics.
+- HTTP request counters.
+- HTTP request duration histograms.
+- Normalized route labels.
+- Successful and failed authentication request metrics.
+
+### Live Cache Invalidation Verification
+
+Created and subsequently soft-deleted verification ticket 100001 using the running API.
+
+- Active tickets after creation: 90,001.
+- Ticket deletion response: HTTP 204.
+- Active tickets after deletion: 90,000.
+- Database soft-delete flag and deletion timestamp: verified.
+- Updated dashboard statistics after deletion: verified.
+
+The verification record remains soft-deleted in the performance database.
+
+### Automated Tests
+
+| Verification | Result |
+|---|---:|
+| Checkpoint 3 baseline | 440 passed |
+| Dashboard functionality tests | 11 passed |
+| Dashboard caching tests | 21 passed |
+| Final regression suite | 472 passed |
+
+Additional tests cover authorization, aggregate consistency, cache HIT behavior, TTL, cache isolation, mutation invalidation, failed mutations, role promotion, inactive users, Redis failures, corrupted payloads and generation recovery.
+
+### Known Limitations
+
+- PostgreSQL commits and Redis invalidation are not atomic.
+- Failed invalidation can temporarily leave stale aggregate statistics.
+- Cache expiration provides eventual recovery from failed invalidation.
+- Global generation invalidation prioritizes correctness and simplicity over targeted cache efficiency.
+- The concurrency test simulates a specific race condition rather than performing a full concurrent stress test.
+- The benchmark measures sequential local HTTP latency, not distributed throughput.
+- Notification delivery is simulated.
+- Real assignment notification execution remains part of the final end-to-end verification.
+
+### Database Changes
+
+No new database migrations were required for the dashboard.
+
+The existing performance database was upgraded to revision `269eebd9bb24`, and both category-department integrity constraints were validated.
+
+### Status
+
+Technical verification completed successfully. Final acceptance remains subject to CI and mentor review.

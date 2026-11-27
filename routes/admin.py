@@ -7,6 +7,7 @@ from api.docs.resources import (
     ROLE_ASSIGNMENT_RESPONSES,
     request_example,
 )
+from core.dashboard_cache import invalidate_dashboard_cache
 from core.dependencies import require_admin
 from database.dependencies import get_db
 from models.role import Role
@@ -105,5 +106,5 @@ def assign_user_role(
             status_code=409,
             detail="User already has this role",
         ) from exc
-
+    invalidate_dashboard_cache()
     return SuccessResponse(data=user_role)
