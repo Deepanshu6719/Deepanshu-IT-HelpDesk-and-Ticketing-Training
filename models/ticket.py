@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, Text
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from models.base import Base
@@ -65,3 +65,27 @@ class Ticket(Base):
         "User", foreign_keys=[assigned_to], back_populates="assigned_tickets"
     )
     comments: Mapped[list["TicketComment"]] = relationship(back_populates="ticket")
+
+
+Index(
+    "ix_tickets_active_created_id",
+    Ticket.created_at.desc(),
+    Ticket.id.desc(),
+    postgresql_where=text("is_deleted IS FALSE"),
+)
+
+Index(
+    "ix_tickets_active_requester_created_id",
+    Ticket.requester_id,
+    Ticket.created_at.desc(),
+    Ticket.id.desc(),
+    postgresql_where=text("is_deleted IS FALSE"),
+)
+
+Index(
+    "ix_tickets_active_assigned_created_id",
+    Ticket.assigned_to,
+    Ticket.created_at.desc(),
+    Ticket.id.desc(),
+    postgresql_where=text("is_deleted IS FALSE"),
+)

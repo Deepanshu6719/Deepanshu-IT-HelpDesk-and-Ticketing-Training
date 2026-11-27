@@ -14,11 +14,12 @@ DATABASE_URL = URL.create(
 
 engine = create_engine(
     DATABASE_URL,
+    pool_size=settings.DB_POOL_SIZE,
+    max_overflow=settings.DB_MAX_OVERFLOW,
+    pool_timeout=settings.DB_POOL_TIMEOUT,
+    pool_recycle=settings.DB_POOL_RECYCLE,
     pool_pre_ping=True,
-    pool_timeout=3,
-    connect_args={
-        "connect_timeout": 3,
-    },
+    connect_args={"connect_timeout": 3},
 )  # creating the engine and its object in "engine"
 
 SessionLocal = sessionmaker(

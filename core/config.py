@@ -45,6 +45,10 @@ class Settings(BaseSettings):
         default=31536000,
         ge=0,
     )
+    DB_POOL_SIZE: int = Field(default=5, ge=1)
+    DB_MAX_OVERFLOW: int = Field(default=5, ge=0)
+    DB_POOL_TIMEOUT: int = Field(default=3, gt=0)
+    DB_POOL_RECYCLE: int = Field(default=1800, gt=0)
 
     @field_validator("CORS_ALLOWED_ORIGINS")
     @classmethod

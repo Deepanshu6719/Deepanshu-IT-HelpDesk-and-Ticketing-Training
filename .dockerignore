@@ -17,3 +17,5 @@ Helpdesk Local.session.sql
 test_persistence.py
 *.dump
 *.sql
+
+performance-results/
