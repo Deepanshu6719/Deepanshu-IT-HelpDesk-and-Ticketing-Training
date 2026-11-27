@@ -37,11 +37,26 @@ services:
     depends_on:
       db:
         condition: service_healthy
+  bootstrap:
+    build: .
+    command:
+      - python
+      - -m
+      - scripts.init_db
+      - --non-interactive
+    env_file:
+      - .env
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
 
   app:
     build: .
     ports:
-      - "127.0.0.1:8001:8000"
+      - "127.0.0.1:${APP_PORT:-8001}:8000"
     env_file:
       - .env
     environment:
@@ -55,10 +70,10 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      migrate:
+      bootstrap:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=3)"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -78,6 +93,8 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      bootstrap:
+        condition: service_completed_successfully
 
 volumes:
   postgres_data:

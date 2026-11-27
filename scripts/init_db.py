@@ -1,11 +1,13 @@
+import argparse
 from getpass import getpass
 
 import structlog
 from email_validator import EmailNotValidError, validate_email
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 import models  # noqa: F401 - Register SQLAlchemy models
+from core.config import settings
 from core.logging import configure_logging
 from core.security import get_password_hash
 from database.connection import SessionLocal
@@ -15,6 +17,7 @@ from models.user import User
 from models.user_role import UserRole
 
 logger = structlog.get_logger(__name__)
+BOOTSTRAP_LOCK_ID = 71616005
 
 
 def initialize_roles(db: Session) -> None:
@@ -43,36 +46,62 @@ def initialize_department(db: Session) -> Department:
     return department
 
 
+def has_active_administrator(db: Session) -> bool:
+    statement = (
+        select(User.id)
+        .join(UserRole, UserRole.user_id == User.id)
+        .join(Role, Role.id == UserRole.role_id)
+        .where(
+            Role.name == "admin",
+            User.is_active.is_(True),
+        )
+        .limit(1)
+    )
+
+    return db.scalar(statement) is not None
+
+
 def initialize_admin(
     db: Session,
     department: Department,
-) -> User | None:
+    *,
+    non_interactive: bool = False,
+) -> User:
+    if non_interactive:
+        email = settings.BOOTSTRAP_ADMIN_EMAIL
+        password = settings.BOOTSTRAP_ADMIN_PASSWORD
 
-    email = input("Enter admin email: ").strip()
+        if not email or not password:
+            raise ValueError("Initial administrator credentials are required.")
+
+    else:
+        email = input("Enter admin email: ").strip()
+
+        password = getpass("Enter admin password: ")
+        confirm_password = getpass("Confirm admin password: ")
+
+        if password != confirm_password:
+            raise ValueError("Passwords do not match.")
 
     try:
         email = validate_email(
-            email,
+            email.strip(),
             check_deliverability=False,
         ).normalized.lower()
 
     except EmailNotValidError as exc:
-        raise ValueError(f"Invalid email address: {exc}") from exc
+        raise ValueError("Invalid administrator email.") from exc
 
     existing_user = db.scalar(select(User).where(User.email == email))
 
     if existing_user is not None:
-        logger.info("admin_creation_skipped", reason="user_exists")
-        return None
-
-    password = getpass("Enter admin password: ")
-    confirm_password = getpass("Confirm admin password: ")
-
-    if password != confirm_password:
-        raise ValueError("Passwords do not match.")
+        raise ValueError("Administrator email already belongs to an existing user.")
 
     if len(password) < 12:
         raise ValueError("Password must contain at least 12 characters.")
+
+    if len(password) > 128:
+        raise ValueError("Password must not exceed 128 characters.")
 
     admin = User(
         email=email,
@@ -83,8 +112,6 @@ def initialize_admin(
 
     db.add(admin)
     db.flush()
-
-    logger.info("administrator_created")
 
     return admin
 
@@ -106,30 +133,71 @@ def assign_admin_roles(db: Session, admin: User) -> None:
         logger.info("role_assigned", role=role_name)
 
 
-def initialize_database() -> None:
+def initialize_database(
+    *,
+    non_interactive: bool = False,
+) -> None:
     with SessionLocal() as db:
         try:
-            initialize_roles(db)
+            db.execute(
+                text("SELECT pg_advisory_xact_lock(:lock_id)"),
+                {"lock_id": BOOTSTRAP_LOCK_ID},
+            )
 
+            initialize_roles(db)
             db.flush()
+
+            if has_active_administrator(db):
+                db.commit()
+
+                logger.info(
+                    "database_initialization_skipped",
+                    reason="active_administrator_exists",
+                )
+
+                return
 
             department = initialize_department(db)
 
-            admin = initialize_admin(db, department)
+            admin = initialize_admin(
+                db,
+                department,
+                non_interactive=non_interactive,
+            )
 
-            if admin is not None:
-                assign_admin_roles(db, admin)
+            assign_admin_roles(db, admin)
 
             db.commit()
 
-            logger.info("database_initialization_completed")
+            logger.info(
+                "database_initialization_completed",
+            )
 
         except Exception:
             db.rollback()
-            logger.error("database_initialization_failed")
+
+            logger.error(
+                "database_initialization_failed",
+            )
+
             raise
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="Initialize Helpdesk database records."
+    )
+
+    parser.add_argument(
+        "--non-interactive",
+        action="store_true",
+        help="Read initial administrator credentials from configuration.",
+    )
+
+    args = parser.parse_args()
+
     configure_logging()
-    initialize_database()
+
+    initialize_database(
+        non_interactive=args.non_interactive,
+    )
